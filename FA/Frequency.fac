@@ -1,0 +1,629 @@
+Frequency
+20
+Frequency.bid
+0
+200
+No. Levels  Base
+AY
+1	1
+2004
+BonusMalus
+12	1
+>= 50 AND < 54
+>= 54 AND < 58
+>= 58 AND < 63
+>= 63 AND < 68
+>= 68 AND < 72
+>= 72 AND < 76
+>= 76 AND < 80
+>= 80 AND < 85
+>= 85 AND < 90
+>= 90 AND < 95
+>= 95 AND < 100
+>= 100 AND < 272
+DrivAge
+45	10
+>= 18 AND < 23
+>= 23 AND < 24
+>= 24 AND < 25
+>= 25 AND < 26
+>= 26 AND < 27
+>= 27 AND < 28
+>= 28 AND < 29
+>= 29 AND < 30
+>= 30 AND < 31
+>= 31 AND < 32
+>= 32 AND < 33
+>= 33 AND < 34
+>= 34 AND < 35
+>= 35 AND < 36
+>= 36 AND < 37
+>= 37 AND < 38
+>= 38 AND < 39
+>= 39 AND < 40
+>= 40 AND < 41
+>= 41 AND < 42
+>= 42 AND < 43
+>= 43 AND < 44
+>= 44 AND < 45
+>= 45 AND < 46
+>= 46 AND < 47
+>= 47 AND < 48
+>= 48 AND < 49
+>= 49 AND < 50
+>= 50 AND < 51
+>= 51 AND < 52
+>= 52 AND < 53
+>= 53 AND < 54
+>= 54 AND < 55
+>= 55 AND < 56
+>= 56 AND < 57
+>= 57 AND < 58
+>= 58 AND < 60
+>= 60 AND < 61
+>= 61 AND < 63
+>= 63 AND < 65
+>= 65 AND < 68
+>= 68 AND < 71
+>= 71 AND < 74
+>= 74 AND < 78
+>= 78 AND < 103
+Garage
+3	2
+Collective garage
+None
+Private garage
+Gender
+2	2
+Female
+Male
+HasKmLimit
+2	1
+0
+1
+LicAge
+20	6
+>= 0 AND < 55
+>= 55 AND < 83
+>= 83 AND < 104
+>= 104 AND < 122
+>= 122 AND < 139
+>= 139 AND < 157
+>= 157 AND < 176
+>= 176 AND < 197
+>= 197 AND < 221
+>= 221 AND < 245
+>= 245 AND < 272
+>= 272 AND < 298
+>= 298 AND < 326
+>= 326 AND < 359
+>= 359 AND < 395
+>= 395 AND < 426
+>= 426 AND < 459
+>= 459 AND < 502
+>= 502 AND < 568
+>= 568 AND < 940
+MariStat
+2	2
+Alone
+Other
+Month
+12	1
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+RiskVar
+20	16
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+SocioCateg
+52	36
+CSP1
+CSP2
+CSP3
+CSP6
+CSP7
+CSP9
+CSP5
+CSP16
+CSP18
+CSP19
+CSP20
+CSP21
+CSP22
+CSP23
+CSP25
+CSP26
+CSP27
+CSP28
+CSP30
+CSP31
+CSP32
+CSP33
+CSP35
+CSP36
+CSP37
+CSP38
+CSP39
+CSP40
+CSP41
+CSP42
+CSP43
+CSP46
+CSP47
+CSP48
+CSP49
+CSP50
+CSP51
+CSP55
+CSP56
+CSP57
+CSP59
+CSP60
+CSP61
+CSP62
+CSP63
+CSP65
+CSP66
+CSP70
+CSP73
+CSP74
+CSP77
+CSP91
+VehAge
+9	9
+0
+1
+2
+3
+4
+5
+6-7
+8-9
+10+
+VehBody
+9	6
+bus
+cabriolet
+coupe
+microvan
+other microvan
+sedan
+sport utility vehicle
+station wagon
+van
+VehClass
+6	3
+0
+A
+B
+H
+M1
+M2
+VehEnergy
+4	4
+diesel
+eletric
+GPL
+regular
+VehEngine
+6	5
+carburation
+direct injection overpowered
+electric
+GPL
+injection
+injection overpowered
+VehMaxSpeed
+10	6
+1-130 km/h
+130-140 km/h
+140-150 km/h
+150-160 km/h
+160-170 km/h
+170-180 km/h
+180-190 km/h
+190-200 km/h
+200-220 km/h
+220+ km/h
+VehPrice
+27	7
+A
+B
+C
+D
+E
+F
+G
+H
+I
+J
+K
+L
+M
+N
+O
+P
+Q
+R
+S
+T
+U
+V
+W
+X
+Y
+Z
+Z1
+VehUsage
+4	2
+Private
+Private+trip to office
+Professional
+Professional run
+Rand
+5	2
+1
+2
+3
+4
+5
+*** Factor Rules Section ***
+AY
+2	Float
+-1	{NULL}
+1	{= 2004}
+-1	{ELSE}
+BonusMalus
+13	Float
+-1	{NULL}
+1	{>= 50, < 54}
+2	{>= 54, < 58}
+3	{>= 58, < 63}
+4	{>= 63, < 68}
+5	{>= 68, < 72}
+6	{>= 72, < 76}
+7	{>= 76, < 80}
+8	{>= 80, < 85}
+9	{>= 85, < 90}
+10	{>= 90, < 95}
+11	{>= 95, < 100}
+12	{>= 100, <= 272}
+-1	{ELSE}
+DrivAge
+46	Float
+-1	{NULL}
+1	{>= 18, < 23}
+2	{>= 23, < 24}
+3	{>= 24, < 25}
+4	{>= 25, < 26}
+5	{>= 26, < 27}
+6	{>= 27, < 28}
+7	{>= 28, < 29}
+8	{>= 29, < 30}
+9	{>= 30, < 31}
+10	{>= 31, < 32}
+11	{>= 32, < 33}
+12	{>= 33, < 34}
+13	{>= 34, < 35}
+14	{>= 35, < 36}
+15	{>= 36, < 37}
+16	{>= 37, < 38}
+17	{>= 38, < 39}
+18	{>= 39, < 40}
+19	{>= 40, < 41}
+20	{>= 41, < 42}
+21	{>= 42, < 43}
+22	{>= 43, < 44}
+23	{>= 44, < 45}
+24	{>= 45, < 46}
+25	{>= 46, < 47}
+26	{>= 47, < 48}
+27	{>= 48, < 49}
+28	{>= 49, < 50}
+29	{>= 50, < 51}
+30	{>= 51, < 52}
+31	{>= 52, < 53}
+32	{>= 53, < 54}
+33	{>= 54, < 55}
+34	{>= 55, < 56}
+35	{>= 56, < 57}
+36	{>= 57, < 58}
+37	{>= 58, < 60}
+38	{>= 60, < 61}
+39	{>= 61, < 63}
+40	{>= 63, < 65}
+41	{>= 65, < 68}
+42	{>= 68, < 71}
+43	{>= 71, < 74}
+44	{>= 74, < 78}
+45	{>= 78, <= 103}
+-1	{ELSE}
+Garage
+4	String
+-1	{NULL}
+1	{= Collective garage}
+2	{= None}
+3	{= Private garage}
+-1	{ELSE}
+Gender
+3	String
+-1	{NULL}
+1	{= Female}
+2	{= Male}
+-1	{ELSE}
+HasKmLimit
+3	Float
+-1	{NULL}
+1	{= 0}
+2	{= 1}
+-1	{ELSE}
+LicAge
+21	Float
+-1	{NULL}
+1	{>= 0, < 55}
+2	{>= 55, < 83}
+3	{>= 83, < 104}
+4	{>= 104, < 122}
+5	{>= 122, < 139}
+6	{>= 139, < 157}
+7	{>= 157, < 176}
+8	{>= 176, < 197}
+9	{>= 197, < 221}
+10	{>= 221, < 245}
+11	{>= 245, < 272}
+12	{>= 272, < 298}
+13	{>= 298, < 326}
+14	{>= 326, < 359}
+15	{>= 359, < 395}
+16	{>= 395, < 426}
+17	{>= 426, < 459}
+18	{>= 459, < 502}
+19	{>= 502, < 568}
+20	{>= 568, <= 940}
+-1	{ELSE}
+MariStat
+3	String
+-1	{NULL}
+1	{= Alone}
+2	{= Other}
+-1	{ELSE}
+Month
+13	Float
+-1	{NULL}
+1	{= 1}
+2	{= 2}
+3	{= 3}
+4	{= 4}
+5	{= 5}
+6	{= 6}
+7	{= 7}
+8	{= 8}
+9	{= 9}
+10	{= 10}
+11	{= 11}
+12	{= 12}
+-1	{ELSE}
+RiskVar
+21	Float
+-1	{NULL}
+1	{= 1}
+2	{= 2}
+3	{= 3}
+4	{= 4}
+5	{= 5}
+6	{= 6}
+7	{= 7}
+8	{= 8}
+9	{= 9}
+10	{= 10}
+11	{= 11}
+12	{= 12}
+13	{= 13}
+14	{= 14}
+15	{= 15}
+16	{= 16}
+17	{= 17}
+18	{= 18}
+19	{= 19}
+20	{= 20}
+-1	{ELSE}
+SocioCateg
+53	String
+-1	{NULL}
+1	{= CSP1}
+8	{= CSP16}
+9	{= CSP18}
+10	{= CSP19}
+2	{= CSP2}
+11	{= CSP20}
+12	{= CSP21}
+13	{= CSP22}
+14	{= CSP23}
+15	{= CSP25}
+16	{= CSP26}
+17	{= CSP27}
+18	{= CSP28}
+3	{= CSP3}
+19	{= CSP30}
+20	{= CSP31}
+21	{= CSP32}
+22	{= CSP33}
+23	{= CSP35}
+24	{= CSP36}
+25	{= CSP37}
+26	{= CSP38}
+27	{= CSP39}
+28	{= CSP40}
+29	{= CSP41}
+30	{= CSP42}
+31	{= CSP43}
+32	{= CSP46}
+33	{= CSP47}
+34	{= CSP48}
+35	{= CSP49}
+7	{= CSP5}
+36	{= CSP50}
+37	{= CSP51}
+38	{= CSP55}
+39	{= CSP56}
+40	{= CSP57}
+41	{= CSP59}
+4	{= CSP6}
+42	{= CSP60}
+43	{= CSP61}
+44	{= CSP62}
+45	{= CSP63}
+46	{= CSP65}
+47	{= CSP66}
+5	{= CSP7}
+48	{= CSP70}
+49	{= CSP73}
+50	{= CSP74}
+51	{= CSP77}
+6	{= CSP9}
+52	{= CSP91}
+-1	{ELSE}
+VehAge
+10	String
+-1	{NULL}
+1	{= 0}
+2	{= 1}
+9	{= 10+}
+3	{= 2}
+4	{= 3}
+5	{= 4}
+6	{= 5}
+7	{= 6-7}
+8	{= 8-9}
+-1	{ELSE}
+VehBody
+10	String
+-1	{NULL}
+1	{= bus}
+2	{= cabriolet}
+3	{= coupe}
+4	{= microvan}
+5	{= other microvan}
+6	{= sedan}
+7	{= sport utility vehicle}
+8	{= station wagon}
+9	{= van}
+-1	{ELSE}
+VehClass
+7	String
+-1	{NULL}
+1	{= 0}
+2	{= A}
+3	{= B}
+4	{= H}
+5	{= M1}
+6	{= M2}
+-1	{ELSE}
+VehEnergy
+5	String
+-1	{NULL}
+1	{= diesel}
+2	{= eletric}
+3	{= GPL}
+4	{= regular}
+-1	{ELSE}
+VehEngine
+7	String
+-1	{NULL}
+1	{= carburation}
+2	{= direct injection overpowered}
+3	{= electric}
+4	{= GPL}
+5	{= injection}
+6	{= injection overpowered}
+-1	{ELSE}
+VehMaxSpeed
+11	String
+-1	{NULL}
+1	{= 1-130 km/h}
+2	{= 130-140 km/h}
+3	{= 140-150 km/h}
+4	{= 150-160 km/h}
+5	{= 160-170 km/h}
+6	{= 170-180 km/h}
+7	{= 180-190 km/h}
+8	{= 190-200 km/h}
+9	{= 200-220 km/h}
+10	{= 220+ km/h}
+-1	{ELSE}
+VehPrice
+28	String
+-1	{NULL}
+1	{= A}
+2	{= B}
+3	{= C}
+4	{= D}
+5	{= E}
+6	{= F}
+7	{= G}
+8	{= H}
+9	{= I}
+10	{= J}
+11	{= K}
+12	{= L}
+13	{= M}
+14	{= N}
+15	{= O}
+16	{= P}
+17	{= Q}
+18	{= R}
+19	{= S}
+20	{= T}
+21	{= U}
+22	{= V}
+23	{= W}
+24	{= X}
+25	{= Y}
+26	{= Z}
+27	{= Z1}
+-1	{ELSE}
+VehUsage
+5	String
+-1	{NULL}
+1	{= Private}
+2	{= Private+trip to office}
+3	{= Professional}
+4	{= Professional run}
+-1	{ELSE}
+Rand
+6	Float
+-1	{NULL}
+1	{= 1}
+2	{= 2}
+3	{= 3}
+4	{= 4}
+5	{= 5}
+-1	{ELSE}
