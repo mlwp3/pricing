@@ -279,7 +279,7 @@ t <- c("ClaimInd")
 p <- append(predictors, targetvar)
 p <- paste(p, collapse = "+")
 f <- as.formula(paste(t,"~",p,collapse = "+"))
-train_stack_bal <- ovun.sample(formula = f, data = train_stack, method = "both", p = 0.2)$data
+train_stack_bal <- ovun.sample(formula = f, data = train_stack, method = "both", p = 0.12)$data
 table(train_stack_bal$ClaimInd) #After Resampling
 rm(p)
 rm(f)
@@ -323,11 +323,9 @@ rm(predictors_nn)
 #Level One Modelling
 mlp1 <- keras_model_sequential()
 mlp1 %>%
-  layer_dense(units = 1000, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
-  layer_dense(units = 650, activation = "tanh") %>%
-  layer_dropout(0.1) %>%
+  layer_dense(units = 10, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
+  layer_dense(units = 6, activation = "tanh") %>%
   layer_dense(units = 2, activation = "tanh") %>%
-  layer_dropout(0.02) %>%
   layer_dense(units = 1, activation = "sigmoid")
 mlp1 %>%
   compile(loss = "mean_squared_error", optimizer = optimizer_rmsprop(lr = 0.01, rho = 0.9))
@@ -338,11 +336,9 @@ predictions_mlp1_l1 <- mlp1 %>% predict(x_val[, -which(colnames(x_val) %in% c("e
 
 mlp2 <- keras_model_sequential()
 mlp2 %>%
-  layer_dense(units = 200, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
+  layer_dense(units = 20, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
   layer_dense(units = 15, activation = "tanh") %>%
-  layer_dropout(0.2) %>%
   layer_dense(units = 5, activation = "tanh") %>%
-  layer_dropout(0.05) %>%
   layer_dense(units = 1, activation = "sigmoid")
 mlp2 %>%
   compile(loss = "mean_squared_error", optimizer = optimizer_rmsprop(lr = 0.01, rho = 0.9))
@@ -353,8 +349,7 @@ predictions_mlp2_l1 <- mlp2 %>% predict(x_val[, -which(colnames(x_val) %in% c("e
 
 mlp3 <- keras_model_sequential()
 mlp3 %>%
-  layer_dense(units = 45, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
-  layer_dropout(0.1) %>%
+  layer_dense(units = 4, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
   layer_dense(units = 2, activation = "tanh") %>%
   layer_dense(units = 1, activation = "sigmoid")
 mlp3 %>%
@@ -375,8 +370,8 @@ fit <- fit(mlp4, x = x_train[, -which(colnames(x_train) %in% c("exposure"))], y 
 predictions_mlp4_l1 <- mlp4 %>% predict(x_val[, -which(colnames(x_val) %in% c("exposure"))])
 #predictions_mlp4_l1 <- (predictions_mlp4_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 
-#Average Level 1 Predictions and Append to Validation Set for Level 2
-l1_predictions <- (0*predictions_mlp1_l1) + (0*predictions_mlp2_l1) + (0*predictions_mlp3_l1) + (1*predictions_mlp4_l1)
+#Pull in Level 1 Predictions and Append to Validation Set for Level 2 - Set weights for each model as appropriate
+l1_predictions <- (0.4*predictions_mlp1_l1) + (0.25*predictions_mlp2_l1) + (0.35*predictions_mlp3_l1) + (0*predictions_mlp4_l1)
 val_stack$l1_pred <- as.numeric(l1_predictions)
 
 #Level Two Modelling
@@ -440,6 +435,50 @@ plot_VehAge <- plot_ly(data = grp_by_VehAge, x = ~VehAge, y = ~avg_clm, type = "
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_VehAge
 
+#One-Way Analysis against Burning Cost for Gender
+grp_by_Gender <- test %>%
+  group_by(Gender) %>%
+  summarize(total_rate_glm = sum(GLM), total_rate_xgb = sum(XGBOOST), total_rate_mlp2 = sum(MLP2), exp = sum(exposure), total_rate_mlp1 = sum(MLP1),
+            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3))
+grp_by_Gender$avg_rate_glm <- grp_by_Gender$total_rate_glm / grp_by_Gender$exp
+grp_by_Gender$avg_rate_xgb <- grp_by_Gender$total_rate_xgb / grp_by_Gender$exp
+grp_by_Gender$avg_rate_mlp2 <- grp_by_Gender$total_rate_mlp2 / grp_by_Gender$exp
+grp_by_Gender$avg_rate_mlp1 <- grp_by_Gender$total_rate_mlp1 / grp_by_Gender$exp
+grp_by_Gender$avg_rate_mlp3 <- grp_by_Gender$total_rate_mlp3 / grp_by_Gender$exp
+grp_by_Gender$avg_rate_stack <- grp_by_Gender$total_rate_stack / grp_by_Gender$exp
+grp_by_Gender$avg_clm <- grp_by_Gender$total_clm / grp_by_Gender$exp
+
+plot_Gender <- plot_ly(data = grp_by_Gender, x = ~Gender, y = ~avg_clm, type = "scatter", mode = "lines", name = "BC") %>%
+  add_trace(y = ~avg_rate_xgb, mode = "lines", name = "XGBoost") %>%
+  add_trace(y = ~avg_rate_mlp2, mode = "lines", name = "MLP 2") %>%
+  add_trace(y = ~avg_rate_mlp1, mode = "lines", name = "MLP 1") %>%
+  add_trace(y = ~avg_rate_mlp3, mode = "lines", name = "MLP 3") %>%
+  add_trace(y = ~avg_rate_stack, mode = "lines", name = "STACK APPROACH") %>%
+  add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
+plot_Gender
+
+#One-Way Analysis against Burning Cost for Vehicle Usage
+grp_by_VehUsage <- test %>%
+  group_by(VehUsage) %>%
+  summarize(total_rate_glm = sum(GLM), total_rate_xgb = sum(XGBOOST), total_rate_mlp2 = sum(MLP2), exp = sum(exposure), total_rate_mlp1 = sum(MLP1),
+            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3))
+grp_by_VehUsage$avg_rate_glm <- grp_by_VehUsage$total_rate_glm / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_rate_xgb <- grp_by_VehUsage$total_rate_xgb / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_rate_mlp2 <- grp_by_VehUsage$total_rate_mlp2 / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_rate_mlp1 <- grp_by_VehUsage$total_rate_mlp1 / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_rate_mlp3 <- grp_by_VehUsage$total_rate_mlp3 / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_rate_stack <- grp_by_VehUsage$total_rate_stack / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_clm <- grp_by_VehUsage$total_clm / grp_by_VehUsage$exp
+
+plot_VehUsage <- plot_ly(data = grp_by_VehUsage, x = ~VehUsage, y = ~avg_clm, type = "scatter", mode = "lines", name = "BC") %>%
+  add_trace(y = ~avg_rate_xgb, mode = "lines", name = "XGBoost") %>%
+  add_trace(y = ~avg_rate_mlp2, mode = "lines", name = "MLP 2") %>%
+  add_trace(y = ~avg_rate_mlp1, mode = "lines", name = "MLP 1") %>%
+  add_trace(y = ~avg_rate_mlp3, mode = "lines", name = "MLP 3") %>%
+  add_trace(y = ~avg_rate_stack, mode = "lines", name = "STACK APPROACH") %>%
+  add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
+plot_VehUsage
+
 ##=======INTERPRETABILITY==========##
 #Initialize Parallel Processing
 cl <- makePSOCKcluster(8)
@@ -476,10 +515,6 @@ ptm <- proc.time()
 imp <- FeatureImp$new(predictor = predictor, loss = "mae", parallel = TRUE)
 proc.time() - ptm
 plot(imp)
-
-#Feature Effects
-feat_effs <- FeatureEffects$new(predictor, parallel = TRUE)
-plot(feat_effs)
 
 #Interaction Effects
 build_int_terms <- function(feature_vec) {
