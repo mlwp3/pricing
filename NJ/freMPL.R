@@ -151,7 +151,7 @@ t <- c("ClaimInd")
 p <- append(predictors, targetvar)
 p <- paste(p, collapse = "+")
 f <- as.formula(paste(t,"~",p,collapse = "+"))
-train_bal <- ovun.sample(formula = f, data = train, method = "both", p = 0.15)$data
+train_bal <- ovun.sample(formula = f, data = train, method = "both", p = 0.1)$data
 table(train_bal$ClaimInd) #After Resampling
 rm(p)
 rm(f)
@@ -193,8 +193,8 @@ y_test <- as.matrix(test_nn[targetvar])
 rm(predictors_nn)
 
 ##=========XGBOOST==========##
-xgboost <- xgboost(data = x_train[, -which(colnames(x_train) %in% c("exposure"))], label = as.numeric(y_train), objective = "reg:logistic", nrounds = 30000, verbose = 1, 
-                   max.depth = 14, eta = 0.1, early_stopping_rounds = 1000, weights = as.numeric(x_train[, c("exposure")]))
+xgboost <- xgboost(data = x_train[, -which(colnames(x_train) %in% c("exposure"))], label = as.numeric(y_train), objective = "reg:logistic", nrounds = 50000, verbose = 1, 
+                   max.depth = 10, eta = 0.1, early_stopping_rounds = 1000, weights = as.numeric(x_train[, c("exposure")]))
 predictions_xgb <- predict(xgboost, x_test[, -which(colnames(x_test) %in% c("exposure"))])
 predictions_xgb <- (predictions_xgb * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 rmse_xgb <- rmse(data = test, targetvar = targetvar, prediction.obj = predictions_xgb)
@@ -203,11 +203,9 @@ rmse_xgb
 ##===========AI-1===========##
 mlp1 <- keras_model_sequential()
 mlp1 %>%
-  layer_dense(units = 250, activation = "tanh", input_shape = ncol(x_train)) %>%
-  layer_dropout(0.05) %>%
-  layer_dense(units = 150, activation = "tanh") %>%
-  layer_dropout(0.025) %>%
-  layer_dense(units = 60, activation = "tanh") %>%
+  layer_dense(units = 10, activation = "tanh", input_shape = ncol(x_train)) %>%
+  layer_dense(units = 6, activation = "tanh") %>%
+  layer_dense(units = 2, activation = "tanh") %>%
   layer_dense(units = 1, activation = "sigmoid")
 mlp1 %>%
   compile(loss = "mean_squared_error", optimizer = optimizer_rmsprop(lr = 0.001, rho = 0.9))
@@ -235,10 +233,9 @@ rmse_mlp2
 ##===========AI-3===========##
 mlp3 <- keras_model_sequential()
 mlp3 %>%
-  layer_dense(units = 200, activation = "tanh", input_shape = ncol(x_train)) %>%
-  layer_dropout(0.1) %>%
-  layer_dense(units = 50, activation = "tanh") %>%
-  layer_dropout(0.05) %>%
+  layer_dense(units = 20, activation = "tanh", input_shape = ncol(x_train)) %>%
+  layer_dense(units = 15, activation = "tanh") %>%
+  layer_dense(units = 5, activation = "tanh") %>%
   layer_dense(units = 1, activation = "sigmoid")
 mlp3 %>%
   compile(loss = "mean_squared_error", optimizer = optimizer_sgd(lr = 0.01, momentum = 0.9))
@@ -248,6 +245,21 @@ predictions_mlp3 <- mlp3 %>% predict(x_test)
 predictions_mlp3 <- (predictions_mlp3 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 rmse_mlp3 <- rmse(data = test, targetvar = targetvar, prediction.obj = predictions_mlp3)
 rmse_mlp3
+
+##===========AI-4===========##
+mlp4 <- keras_model_sequential()
+mlp4 %>%
+  layer_dense(units = 4, activation = "tanh", input_shape = ncol(x_train)) %>%
+  layer_dense(units = 2, activation = "tanh") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+mlp4 %>%
+  compile(loss = "mean_squared_error", optimizer = optimizer_sgd(lr = 0.01, momentum = 0.9))
+fit <- fit(mlp4, x = x_train, y = y_train, batch_size = 10000, epochs = 15000, verbose = 1, 
+           callbacks = list(callback_early_stopping(monitor = "loss", min_delta = 0.0001, patience = 1000, verbose = 1)))
+predictions_mlp4 <- mlp4 %>% predict(x_test)
+predictions_mlp4 <- (predictions_mlp4 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
+rmse_mlp4 <- rmse(data = test, targetvar = targetvar, prediction.obj = predictions_mlp4)
+rmse_mlp4
 
 ##=====STACK APPROACH=======##
 #Split Training dataset and Process
@@ -279,7 +291,7 @@ t <- c("ClaimInd")
 p <- append(predictors, targetvar)
 p <- paste(p, collapse = "+")
 f <- as.formula(paste(t,"~",p,collapse = "+"))
-train_stack_bal <- ovun.sample(formula = f, data = train_stack, method = "both", p = 0.12)$data
+train_stack_bal <- ovun.sample(formula = f, data = train_stack, method = "both", p = 0.125)$data
 table(train_stack_bal$ClaimInd) #After Resampling
 rm(p)
 rm(f)
@@ -371,12 +383,12 @@ predictions_mlp4_l1 <- mlp4 %>% predict(x_val[, -which(colnames(x_val) %in% c("e
 #predictions_mlp4_l1 <- (predictions_mlp4_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 
 #Pull in Level 1 Predictions and Append to Validation Set for Level 2 - Set weights for each model as appropriate
-l1_predictions <- (0.4*predictions_mlp1_l1) + (0.25*predictions_mlp2_l1) + (0.35*predictions_mlp3_l1) + (0*predictions_mlp4_l1)
+l1_predictions <- (0.4*predictions_mlp1_l1) + (0.6*predictions_mlp2_l1) + (0*predictions_mlp3_l1) + (0*predictions_mlp4_l1)
 val_stack$l1_pred <- as.numeric(l1_predictions)
 
 #Level Two Modelling
 xgboost <- xgboost(data = x_val[, -which(colnames(x_val) %in% c("exposure"))], label = as.numeric(l1_predictions), objective = "reg:logistic", nrounds = 35000, verbose = 1, 
-                   max.depth = 14, eta = 0.1, early_stopping_rounds = 1000, weights = as.numeric(x_val[, c("exposure")]))
+                   max.depth = 6, eta = 0.1, early_stopping_rounds = 1000, weights = as.numeric(x_val[, c("exposure")]))
 predictions_xgb_l2 <- predict(xgboost, x_test[, -which(colnames(x_test) %in% c("exposure"))])
 predictions_l2 <- (predictions_xgb_l2 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 
@@ -385,6 +397,7 @@ test$GLM <- as.numeric(predictions_glm)
 test$MLP1 <- as.numeric(predictions_mlp1)
 test$MLP2 <- as.numeric(predictions_mlp2)
 test$MLP3 <- as.numeric(predictions_mlp3)
+test$MLP4 <- as.numeric(predictions_mlp4)
 test$XGBOOST <- as.numeric(predictions_xgb)
 test$STACK <- as.numeric(predictions_l2)
 
@@ -395,12 +408,13 @@ rmse_stack
 grp_by_VehBody <- test %>%
   group_by(VehBody) %>%
   summarize(total_rate_glm = sum(GLM), total_rate_xgb = sum(XGBOOST), total_rate_mlp2 = sum(MLP2), exp = sum(exposure), total_rate_mlp1 = sum(MLP1),
-            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3))
+            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3), total_rate_mlp4 = sum(MLP4))
 grp_by_VehBody$avg_rate_glm <- grp_by_VehBody$total_rate_glm / grp_by_VehBody$exp
 grp_by_VehBody$avg_rate_xgb <- grp_by_VehBody$total_rate_xgb / grp_by_VehBody$exp
 grp_by_VehBody$avg_rate_mlp2 <- grp_by_VehBody$total_rate_mlp2 / grp_by_VehBody$exp
 grp_by_VehBody$avg_rate_mlp1 <- grp_by_VehBody$total_rate_mlp1 / grp_by_VehBody$exp
 grp_by_VehBody$avg_rate_mlp3 <- grp_by_VehBody$total_rate_mlp3 / grp_by_VehBody$exp
+grp_by_VehBody$avg_rate_mlp4 <- grp_by_VehBody$total_rate_mlp4 / grp_by_VehBody$exp
 grp_by_VehBody$avg_rate_stack <- grp_by_VehBody$total_rate_stack / grp_by_VehBody$exp
 grp_by_VehBody$avg_clm <- grp_by_VehBody$total_clm / grp_by_VehBody$exp
 
@@ -409,6 +423,7 @@ plot_VehBody <- plot_ly(data = grp_by_VehBody, x = ~VehBody, y = ~avg_clm, type 
   add_trace(y = ~avg_rate_mlp2, mode = "lines", name = "MLP 2") %>%
   add_trace(y = ~avg_rate_mlp1, mode = "lines", name = "MLP 1") %>%
   add_trace(y = ~avg_rate_mlp3, mode = "lines", name = "MLP 3") %>%
+  add_trace(y = ~avg_rate_mlp4, mode = "lines", name = "MLP 4") %>%
   add_trace(y = ~avg_rate_stack, mode = "lines", name = "STACK APPROACH") %>%
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_VehBody
@@ -417,12 +432,13 @@ plot_VehBody
 grp_by_VehAge <- test %>%
   group_by(VehAge) %>%
   summarize(total_rate_glm = sum(GLM), total_rate_xgb = sum(XGBOOST), total_rate_mlp2 = sum(MLP2), exp = sum(exposure), total_rate_mlp1 = sum(MLP1),
-            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3))
+            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3), total_rate_mlp4 = sum(MLP4))
 grp_by_VehAge$avg_rate_glm <- grp_by_VehAge$total_rate_glm / grp_by_VehAge$exp
 grp_by_VehAge$avg_rate_xgb <- grp_by_VehAge$total_rate_xgb / grp_by_VehAge$exp
 grp_by_VehAge$avg_rate_mlp2 <- grp_by_VehAge$total_rate_mlp2 / grp_by_VehAge$exp
 grp_by_VehAge$avg_rate_mlp1 <- grp_by_VehAge$total_rate_mlp1 / grp_by_VehAge$exp
 grp_by_VehAge$avg_rate_mlp3 <- grp_by_VehAge$total_rate_mlp3 / grp_by_VehAge$exp
+grp_by_VehAge$avg_rate_mlp4 <- grp_by_VehAge$total_rate_mlp4 / grp_by_VehAge$exp
 grp_by_VehAge$avg_rate_stack <- grp_by_VehAge$total_rate_stack / grp_by_VehAge$exp
 grp_by_VehAge$avg_clm <- grp_by_VehAge$total_clm / grp_by_VehAge$exp
 
@@ -431,6 +447,7 @@ plot_VehAge <- plot_ly(data = grp_by_VehAge, x = ~VehAge, y = ~avg_clm, type = "
   add_trace(y = ~avg_rate_mlp2, mode = "lines", name = "MLP 2") %>%
   add_trace(y = ~avg_rate_mlp1, mode = "lines", name = "MLP 1") %>%
   add_trace(y = ~avg_rate_mlp3, mode = "lines", name = "MLP 3") %>%
+  add_trace(y = ~avg_rate_mlp4, mode = "lines", name = "MLP 4") %>%
   add_trace(y = ~avg_rate_stack, mode = "lines", name = "STACK APPROACH") %>%
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_VehAge
@@ -439,12 +456,13 @@ plot_VehAge
 grp_by_Gender <- test %>%
   group_by(Gender) %>%
   summarize(total_rate_glm = sum(GLM), total_rate_xgb = sum(XGBOOST), total_rate_mlp2 = sum(MLP2), exp = sum(exposure), total_rate_mlp1 = sum(MLP1),
-            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3))
+            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3), total_rate_mlp4 = sum(MLP4))
 grp_by_Gender$avg_rate_glm <- grp_by_Gender$total_rate_glm / grp_by_Gender$exp
 grp_by_Gender$avg_rate_xgb <- grp_by_Gender$total_rate_xgb / grp_by_Gender$exp
 grp_by_Gender$avg_rate_mlp2 <- grp_by_Gender$total_rate_mlp2 / grp_by_Gender$exp
 grp_by_Gender$avg_rate_mlp1 <- grp_by_Gender$total_rate_mlp1 / grp_by_Gender$exp
 grp_by_Gender$avg_rate_mlp3 <- grp_by_Gender$total_rate_mlp3 / grp_by_Gender$exp
+grp_by_Gender$avg_rate_mlp4 <- grp_by_Gender$total_rate_mlp4 / grp_by_Gender$exp
 grp_by_Gender$avg_rate_stack <- grp_by_Gender$total_rate_stack / grp_by_Gender$exp
 grp_by_Gender$avg_clm <- grp_by_Gender$total_clm / grp_by_Gender$exp
 
@@ -453,6 +471,7 @@ plot_Gender <- plot_ly(data = grp_by_Gender, x = ~Gender, y = ~avg_clm, type = "
   add_trace(y = ~avg_rate_mlp2, mode = "lines", name = "MLP 2") %>%
   add_trace(y = ~avg_rate_mlp1, mode = "lines", name = "MLP 1") %>%
   add_trace(y = ~avg_rate_mlp3, mode = "lines", name = "MLP 3") %>%
+  add_trace(y = ~avg_rate_mlp4, mode = "lines", name = "MLP 4") %>%
   add_trace(y = ~avg_rate_stack, mode = "lines", name = "STACK APPROACH") %>%
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_Gender
@@ -461,12 +480,13 @@ plot_Gender
 grp_by_VehUsage <- test %>%
   group_by(VehUsage) %>%
   summarize(total_rate_glm = sum(GLM), total_rate_xgb = sum(XGBOOST), total_rate_mlp2 = sum(MLP2), exp = sum(exposure), total_rate_mlp1 = sum(MLP1),
-            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3))
+            total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount), total_rate_mlp3 = sum(MLP3), total_rate_mlp4 = sum(MLP4))
 grp_by_VehUsage$avg_rate_glm <- grp_by_VehUsage$total_rate_glm / grp_by_VehUsage$exp
 grp_by_VehUsage$avg_rate_xgb <- grp_by_VehUsage$total_rate_xgb / grp_by_VehUsage$exp
 grp_by_VehUsage$avg_rate_mlp2 <- grp_by_VehUsage$total_rate_mlp2 / grp_by_VehUsage$exp
 grp_by_VehUsage$avg_rate_mlp1 <- grp_by_VehUsage$total_rate_mlp1 / grp_by_VehUsage$exp
 grp_by_VehUsage$avg_rate_mlp3 <- grp_by_VehUsage$total_rate_mlp3 / grp_by_VehUsage$exp
+grp_by_VehUsage$avg_rate_mlp4 <- grp_by_VehUsage$total_rate_mlp4 / grp_by_VehUsage$exp
 grp_by_VehUsage$avg_rate_stack <- grp_by_VehUsage$total_rate_stack / grp_by_VehUsage$exp
 grp_by_VehUsage$avg_clm <- grp_by_VehUsage$total_clm / grp_by_VehUsage$exp
 
@@ -475,6 +495,7 @@ plot_VehUsage <- plot_ly(data = grp_by_VehUsage, x = ~VehUsage, y = ~avg_clm, ty
   add_trace(y = ~avg_rate_mlp2, mode = "lines", name = "MLP 2") %>%
   add_trace(y = ~avg_rate_mlp1, mode = "lines", name = "MLP 1") %>%
   add_trace(y = ~avg_rate_mlp3, mode = "lines", name = "MLP 3") %>%
+  add_trace(y = ~avg_rate_mlp4, mode = "lines", name = "MLP 4") %>%
   add_trace(y = ~avg_rate_stack, mode = "lines", name = "STACK APPROACH") %>%
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_VehUsage
@@ -484,7 +505,7 @@ plot_VehUsage
 cl <- makePSOCKcluster(8)
 registerDoParallel(cl)
 
-targetvar <- c("XGBOOST")
+targetvar <- c("STACK")
 predictors <- c("LicAge", "VehAge", "Gender", "MariStat", "VehUsage", "DrivAge", "HasKmLimit", "BonusMalus", "VehBody", "VehPriceGrp", "VehEngine",
                 "VehEnergy", "VehMaxSpeed", "VehClass", "Garage")
 predictors <- paste(predictors, collapse = "+")
@@ -498,7 +519,7 @@ test$RF_SURROGATE <- as.numeric(predict(rf_surrogate, test)$predictions)
 features <- c("LicAge", "VehAge", "Gender", "MariStat", "VehUsage", "DrivAge", "HasKmLimit", "BonusMalus", "VehBody", "VehPriceGrp", "VehEngine",
               "VehEnergy", "VehMaxSpeed", "VehClass", "Garage")
 imp <- vi(rf_surrogate, method = "model", feature_names = features, scale = TRUE)
-vip(rf_surrogate, method = "model", feature_names = features, scale = TRUE) #Impurity-based Feature Importance
+vip(rf_surrogate, method = "model", feature_names = features, scale = TRUE) #Impurity-based Feature Importance - I DON'T TRUST THIS
 #vip(rf_surrogate, method = "pdp", feature_names = features, scale = TRUE) #PD-based Feature Importance - Experimental so wouldn't use this
 
 ##Feature Importance and Effects using IML
@@ -567,6 +588,8 @@ interactions <- interactions %>%
 interactions$int_terms <- factor(interactions$int_terms, levels = unique(interactions$int_terms)[order(interactions$int, decreasing = FALSE)])
 int_plot <- plot_ly(data = interactions, x = ~int, y = ~int_terms, type = "bar", orientation = "h")
 int_plot
+
+#Local Interpretation
 
 
 
