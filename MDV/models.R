@@ -124,13 +124,24 @@ test_df %>% select(amount, amount_pred) %>% gather() %>%
    geom_histogram(aes(y=..density.., x=value, fill=key))
 
 
-test_df %>% select(amount, amount_pred, exposure) %>% mutate(abs_diff = abs(amount - amount_pred)) %>%
+sum_table <- test_df %>% select(amount, amount_pred, exposure) %>% mutate(abs_diff = abs(amount - amount_pred)) %>%
   mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
   group_by(diff_interval) %>% 
   summarise(pred_mean = weighted.mean(amount_pred,exposure),
             obs_mean = weighted.mean(amount,exposure),
-            exposure = sum(exposure)) %>% 
+            exposure = sum(exposure))
+  
+sum_table %>% 
   ggplot()+
-  geom_bar(aes(x = diff_interval, y = exposure), stat="identity")
+  geom_bar(aes(x = diff_interval, y = exposure), stat="identity")+
+  geom_line(aes(x = diff_interval, y = pred_mean* ( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_point(aes(x = diff_interval, y = pred_mean*( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_line(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
+  labs(y = "Exposure",
+        x = "Absolute Difference",
+        colour = "Legend", title = "GLM Results")
 
+ggsave(filename = "GLM_results.png", device = "png")
 
