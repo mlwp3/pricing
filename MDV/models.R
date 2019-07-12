@@ -8,6 +8,18 @@ library(gridExtra)
 library(caret)
 library(GGally)
 library(forcats)
+library(gam)
+library(earth)
+
+
+# Functions ---------------------------------------------------------------
+
+NRMSE <- function(pred, obs){
+  
+  RMSE(pred, obs)/(max(obs)-min(obs))
+
+  }
+
 
 # Load Dataset ------------------------------------------------------------
 
@@ -69,7 +81,7 @@ test_df <- model_df %>% filter(id > .8) %>% select(-id) %>% na.omit()
 
 ### Numbers Modeling
 
-numbers_model <- glm(numbers ~ LicAge + 
+glm_numbers_model <- glm(numbers ~ LicAge + 
                             VehAge +
                             Gender +
                             MariStat +
@@ -88,11 +100,11 @@ numbers_model <- glm(numbers ~ LicAge +
                             Garage+
                             offset(log(exposure)), data = train_df, family = poisson(link = "log"))
 
-summary(numbers_model)
+summary(glm_numbers_model)
 
 ### Severity Modeling
 
-sev_model <- glm(sev ~ LicAge + 
+glm_sev_model <- glm(sev ~ LicAge + 
                     VehAge +
                     Gender +
                     MariStat +
@@ -110,38 +122,212 @@ sev_model <- glm(sev ~ LicAge +
                     RiskVar +
                     Garage, data = filter(train_df, sev > 0), weights = numbers, family = Gamma(link = "log"))
 
-summary(sev_model)
+summary(glm_sev_model)
 
-# Predictions -------------------------------------------------------------
+### Predictions
 
-test_df <- test_df %>% mutate(numbers_pred = predict(numbers_model, newdata = test_df, type = "response", offset=exposure),
-                              sev_pred = predict(sev_model, newdata = test_df, type = "response")) %>% 
-                      mutate(amount_pred = numbers_pred * sev_pred)
+test_df <- test_df %>% mutate(glm_numbers_pred = predict(glm_numbers_model, newdata = test_df, type = "response", offset=exposure),
+                              glm_sev_pred = predict(glm_sev_model, newdata = test_df, type = "response")) %>% 
+                      mutate(glm_amount_pred = glm_numbers_pred * glm_sev_pred)
 
 
-test_df %>% select(amount, amount_pred) %>% gather() %>% 
+test_df %>% select(amount, glm_amount_pred) %>% gather() %>% 
    ggplot()+
    geom_histogram(aes(y=..density.., x=value, fill=key))
 
 
-sum_table <- test_df %>% select(amount, amount_pred, exposure) %>% mutate(abs_diff = abs(amount - amount_pred)) %>%
+sum_table <- test_df %>% select(amount, glm_amount_pred, exposure) %>% mutate(abs_diff = abs(amount - glm_amount_pred)) %>%
   mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
   group_by(diff_interval) %>% 
-  summarise(pred_mean = weighted.mean(amount_pred,exposure),
+  summarise(glm_pred_mean = weighted.mean(glm_amount_pred,exposure),
             obs_mean = weighted.mean(amount,exposure),
             exposure = sum(exposure))
   
 sum_table %>% 
   ggplot()+
   geom_bar(aes(x = diff_interval, y = exposure), stat="identity")+
-  geom_line(aes(x = diff_interval, y = pred_mean* ( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
-  geom_point(aes(x = diff_interval, y = pred_mean*( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
-  geom_line(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
-  geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
-  scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
+  geom_line(aes(x = diff_interval, y = glm_pred_mean* ( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_point(aes(x = diff_interval, y = glm_pred_mean*( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_line(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
   labs(y = "Exposure",
         x = "Absolute Difference",
         colour = "Legend", title = "GLM Results")
 
 ggsave(filename = "GLM_results.png", device = "png")
+
+
+glm_nrmse <- NRMSE(test_df$glm_amount_pred, test_df$amount) # NRMSE
+
+
+# GAM Modeling ------------------------------------------------------------
+
+### Numbers Modeling
+
+gam_numbers_model <- gam(numbers ~ LicAge + 
+                       VehAge +
+                       Gender +
+                       MariStat +
+                       SocioCateg +
+                       VehUsage +
+                       DrivAge +
+                       HasKmLimit +
+                       BonusMalus +
+                       VehBody +
+                       VehPrice +
+                       VehEngine +
+                       VehEnergy +
+                       VehMaxSpeed +
+                       VehClass +
+                       RiskVar +
+                       Garage+
+                       offset(log(exposure)), data = train_df, family = poisson(link = "log"))
+
+summary(gam_numbers_model)
+
+### Severity Modeling
+
+gam_sev_model <- gam(sev ~ LicAge + 
+                   VehAge +
+                   Gender +
+                   MariStat +
+                   SocioCateg +
+                   VehUsage +
+                   DrivAge +
+                   HasKmLimit +
+                   BonusMalus +
+                   VehBody +
+                   VehPrice +
+                   VehEngine +
+                   VehEnergy +
+                   VehMaxSpeed +
+                   VehClass +
+                   RiskVar +
+                   Garage, data = filter(train_df, sev > 0), weights = numbers, family = Gamma(link = "log"))
+
+summary(gam_sev_model)
+
+### Predictions
+
+test_df <- test_df %>% mutate(gam_numbers_pred = predict(gam_numbers_model, newdata = test_df, type = "response", offset=exposure),
+                              gam_sev_pred = predict(gam_sev_model, newdata = test_df, type = "response")) %>% 
+  mutate(gam_amount_pred = gam_numbers_pred * gam_sev_pred)
+
+
+test_df %>% select(amount, gam_amount_pred) %>% gather() %>% 
+  ggplot()+
+  geom_histogram(aes(y=..density.., x=value, fill=key))
+
+
+sum_table <- test_df %>% select(amount, gam_amount_pred, exposure) %>% mutate(abs_diff = abs(amount - gam_amount_pred)) %>%
+  mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
+  group_by(diff_interval) %>% 
+  summarise(gam_pred_mean = weighted.mean(gam_amount_pred,exposure),
+            obs_mean = weighted.mean(amount,exposure),
+            exposure = sum(exposure))
+
+sum_table %>% 
+  ggplot()+
+  geom_bar(aes(x = diff_interval, y = exposure), stat="identity")+
+  geom_line(aes(x = diff_interval, y = gam_pred_mean* ( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_point(aes(x = diff_interval, y = gam_pred_mean*( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_line(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
+  labs(y = "Exposure",
+       x = "Absolute Difference",
+       colour = "Legend", title = "GAM Results")
+
+ggsave(filename = "GAM_results.png", device = "png")
+
+
+gam_nrmse <- NRMSE(test_df$gam_amount_pred, test_df$amount) # NRMSE
+
+
+# MARS Modeling ------------------------------------------------------------
+
+### Numbers Modeling
+
+mars_numbers_model <- earth(numbers ~ LicAge + 
+                       VehAge +
+                       Gender +
+                       MariStat +
+                       SocioCateg +
+                       VehUsage +
+                       DrivAge +
+                       HasKmLimit +
+                       BonusMalus +
+                       VehBody +
+                       VehPrice +
+                       VehEngine +
+                       VehEnergy +
+                       VehMaxSpeed +
+                       VehClass +
+                       RiskVar +
+                       Garage+
+                       offset(log(exposure)), data = train_df, glm = list(family = poisson(link = "log")))
+
+summary(mars_numbers_model)
+
+### Severity Modeling
+
+mars_sev_model <- earth(sev ~ LicAge + 
+                   VehAge +
+                   Gender +
+                   MariStat +
+                   SocioCateg +
+                   VehUsage +
+                   DrivAge +
+                   HasKmLimit +
+                   BonusMalus +
+                   VehBody +
+                   VehPrice +
+                   VehEngine +
+                   VehEnergy +
+                   VehMaxSpeed +
+                   VehClass +
+                   RiskVar +
+                   Garage, data = filter(train_df, sev > 0), weights = numbers, glm = list(family = Gamma(link = "log")))
+
+summary(mars_sev_model)
+
+### Predictions
+
+test_df <- test_df %>% mutate(mars_numbers_pred = predict(mars_numbers_model, newdata = test_df, type = "response"),
+                              mars_sev_pred = predict(mars_sev_model, newdata = test_df, type = "response")) %>% 
+  mutate(mars_amount_pred = mars_numbers_pred * mars_sev_pred)
+
+
+test_df %>% select(amount, mars_amount_pred) %>% gather() %>% 
+  ggplot()+
+  geom_histogram(aes(y=..density.., x=value, fill=key))
+
+
+sum_table <- test_df %>% select(amount, mars_amount_pred, exposure) %>% mutate(abs_diff = abs(amount - mars_amount_pred)) %>%
+  mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
+  group_by(diff_interval) %>% 
+  summarise(mars_pred_mean = weighted.mean(mars_amount_pred,exposure),
+            obs_mean = weighted.mean(amount,exposure),
+            exposure = sum(exposure))
+
+sum_table %>% 
+  ggplot()+
+  geom_bar(aes(x = diff_interval, y = exposure), stat="identity")+
+  geom_line(aes(x = diff_interval, y = mars_pred_mean* ( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_point(aes(x = diff_interval, y = mars_pred_mean*( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), group=1, color = "Predicted"))+
+  geom_line(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
+  scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
+  labs(y = "Exposure",
+       x = "Absolute Difference",
+       colour = "Legend", title = "MARS Results")
+
+ggsave(filename = "MARS_results.png", device = "png")
+
+mars_nrmse <- NRMSE(test_df$mars_amount_pred, test_df$amount) # NRMSE
+
+
+
+
 
