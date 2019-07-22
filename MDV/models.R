@@ -10,7 +10,7 @@ library(GGally)
 library(forcats)
 library(gam)
 library(earth)
-
+library(pracma)
 
 # Functions ---------------------------------------------------------------
 
@@ -20,6 +20,11 @@ NRMSE <- function(pred, obs){
 
   }
 
+
+gini<- function(x){
+  
+  abs(2*(trapz(pull(x[,1]), pull(x[,2])) - .5))
+}
 
 # Load Dataset ------------------------------------------------------------
 
@@ -97,7 +102,7 @@ glm_numbers_model <- glm(numbers ~ LicAge +
                             VehMaxSpeed +
                             VehClass +
                             RiskVar +
-                            Garage+
+                            Garage +
                             offset(log(exposure)), data = train_df, family = poisson(link = "log"))
 
 summary(glm_numbers_model)
@@ -126,18 +131,17 @@ summary(glm_sev_model)
 
 ### Predictions
 
-test_df <- test_df %>% mutate(glm_numbers_pred = predict(glm_numbers_model, newdata = test_df, type = "response", offset=exposure),
+test_df <- test_df %>% mutate(glm_numbers_pred = predict(glm_numbers_model, newdata = test_df, type = "response"),
                               glm_sev_pred = predict(glm_sev_model, newdata = test_df, type = "response")) %>% 
                       mutate(glm_amount_pred = glm_numbers_pred * glm_sev_pred)
 
 
-test_df %>% select(amount, glm_amount_pred) %>% gather() %>% 
-   ggplot()+
-   geom_histogram(aes(y=..density.., x=value, fill=key))
+with(test_df,summary(amount))
+with(test_df,summary(glm_amount_pred))
 
 
-sum_table <- test_df %>% select(amount, glm_amount_pred, exposure) %>% mutate(abs_diff = abs(amount - glm_amount_pred)) %>%
-  mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
+sum_table <- test_df %>% select(amount, glm_amount_pred, exposure) %>% 
+  mutate(diff_interval = cut_interval(glm_amount_pred,20)) %>% 
   group_by(diff_interval) %>% 
   summarise(glm_pred_mean = weighted.mean(glm_amount_pred,exposure),
             obs_mean = weighted.mean(amount,exposure),
@@ -152,13 +156,31 @@ sum_table %>%
   geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
   scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$glm_pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
   labs(y = "Exposure",
-        x = "Absolute Difference",
+        x = "Absolute Value",
         colour = "Legend", title = "GLM Results")
 
 ggsave(filename = "GLM_results.png", device = "png")
 
 
-glm_nrmse <- NRMSE(test_df$glm_amount_pred, test_df$amount) # NRMSE
+test_df %>% arrange(glm_amount_pred) %>% 
+  mutate(glm_lc_pred = glm_amount_pred / exposure,
+         cum_loss = cumsum(glm_lc_pred)/sum(glm_lc_pred),
+         cum_exp = cumsum(exposure)/sum(exposure)) %>% 
+  select(cum_loss, cum_exp) %>%
+  ggplot()+
+  geom_line(aes(x = cum_exp, y = cum_loss))+
+  geom_abline(slope = 1, intercept = 0)
+
+
+glm_gini <- gini(test_df %>% arrange(glm_amount_pred) %>% 
+                   mutate(glm_lc_pred = glm_amount_pred / exposure,
+                          cum_loss = cumsum(glm_lc_pred)/sum(glm_lc_pred),
+                          cum_exp = cumsum(exposure)/sum(exposure)) %>% 
+                   select(cum_exp, cum_loss))
+
+
+
+glm_nrmse <- with(test_df,NRMSE(glm_amount_pred, amount)) # NRMSE
 
 
 # GAM Modeling ------------------------------------------------------------
@@ -220,8 +242,8 @@ test_df %>% select(amount, gam_amount_pred) %>% gather() %>%
   geom_histogram(aes(y=..density.., x=value, fill=key))
 
 
-sum_table <- test_df %>% select(amount, gam_amount_pred, exposure) %>% mutate(abs_diff = abs(amount - gam_amount_pred)) %>%
-  mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
+sum_table <- test_df %>% select(amount, gam_amount_pred, exposure) %>% 
+  mutate(diff_interval = cut_interval(gam_amount_pred,20)) %>% 
   group_by(diff_interval) %>% 
   summarise(gam_pred_mean = weighted.mean(gam_amount_pred,exposure),
             obs_mean = weighted.mean(amount,exposure),
@@ -240,6 +262,25 @@ sum_table %>%
        colour = "Legend", title = "GAM Results")
 
 ggsave(filename = "GAM_results.png", device = "png")
+
+
+
+test_df %>% arrange(gam_amount_pred) %>% 
+  mutate(gam_lc_pred = gam_amount_pred / exposure,
+         cum_loss = cumsum(gam_lc_pred)/sum(gam_lc_pred),
+         cum_exp = cumsum(exposure)/sum(exposure)) %>% 
+  select(cum_loss, cum_exp) %>%
+  ggplot()+
+  geom_line(aes(x = cum_exp, y = cum_loss))+
+  geom_abline(slope = 1, intercept = 0)
+
+
+gam_gini <- gini(test_df %>% arrange(gam_amount_pred) %>% 
+                   mutate(gam_lc_pred = gam_amount_pred / exposure,
+                          cum_loss = cumsum(gam_lc_pred)/sum(gam_lc_pred),
+                          cum_exp = cumsum(exposure)/sum(exposure)) %>% 
+                   select(cum_exp, cum_loss))
+
 
 
 gam_nrmse <- NRMSE(test_df$gam_amount_pred, test_df$amount) # NRMSE
@@ -294,9 +335,10 @@ summary(mars_sev_model)
 
 ### Predictions
 
-test_df <- test_df %>% mutate(mars_numbers_pred = predict(mars_numbers_model, newdata = test_df, type = "response"),
-                              mars_sev_pred = predict(mars_sev_model, newdata = test_df, type = "response")) %>% 
+test_df <- test_df %>% mutate(mars_numbers_pred = drop(predict(mars_numbers_model, newdata = test_df, type = "response")),
+                              mars_sev_pred = drop(predict(mars_sev_model, newdata = test_df, type = "response"))) %>% 
   mutate(mars_amount_pred = mars_numbers_pred * mars_sev_pred)
+
 
 
 test_df %>% select(amount, mars_amount_pred) %>% gather() %>% 
@@ -304,8 +346,8 @@ test_df %>% select(amount, mars_amount_pred) %>% gather() %>%
   geom_histogram(aes(y=..density.., x=value, fill=key))
 
 
-sum_table <- test_df %>% select(amount, mars_amount_pred, exposure) %>% mutate(abs_diff = abs(amount - mars_amount_pred)) %>%
-  mutate(diff_interval = cut_interval(abs_diff,20)) %>% 
+sum_table <- test_df %>% select(amount, mars_amount_pred, exposure) %>%
+  mutate(diff_interval = cut_interval(mars_amount_pred,20)) %>% 
   group_by(diff_interval) %>% 
   summarise(mars_pred_mean = weighted.mean(mars_amount_pred,exposure),
             obs_mean = weighted.mean(amount,exposure),
@@ -325,9 +367,25 @@ sum_table %>%
 
 ggsave(filename = "MARS_results.png", device = "png")
 
+
+test_df %>% arrange(mars_amount_pred) %>% 
+  mutate(mars_lc_pred = mars_amount_pred / exposure,
+         cum_loss = cumsum(mars_lc_pred)/sum(mars_lc_pred),
+         cum_exp = cumsum(exposure)/sum(exposure)) %>% 
+  select(cum_loss, cum_exp) %>%
+  ggplot()+
+  geom_line(aes(x = cum_exp, y = cum_loss))+
+  geom_abline(slope = 1, intercept = 0)
+
+
+
+mars_gini <- gini(test_df %>% arrange(mars_amount_pred) %>% 
+                   mutate(gam_lc_pred = gam_amount_pred / exposure,
+                          cum_loss = cumsum(gam_lc_pred)/sum(gam_lc_pred),
+                          cum_exp = cumsum(exposure)/sum(exposure)) %>% 
+                   select(cum_exp, cum_loss))
+
+
 mars_nrmse <- NRMSE(test_df$mars_amount_pred, test_df$amount) # NRMSE
-
-
-
 
 
