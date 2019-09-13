@@ -159,7 +159,7 @@ sum_table %>%
         x = "Absolute Value",
         colour = "Legend", title = "GLM Results")
 
-ggsave(filename = "GLM_results.png", device = "png")
+ggsave(filename = "GLM_results.png", device = "png", width = 12, height = 6.75, dpi = 320, units = "in")
 
 
 test_df %>% arrange(glm_amount_pred) %>% 
@@ -169,7 +169,8 @@ test_df %>% arrange(glm_amount_pred) %>%
   select(cum_loss, cum_exp) %>%
   ggplot()+
   geom_line(aes(x = cum_exp, y = cum_loss))+
-  geom_abline(slope = 1, intercept = 0)
+  geom_abline(slope = 1, intercept = 0)+
+  labs(title = "GLM Gini")
 
 
 glm_gini <- gini(test_df %>% arrange(glm_amount_pred) %>% 
@@ -178,6 +179,7 @@ glm_gini <- gini(test_df %>% arrange(glm_amount_pred) %>%
                           cum_exp = cumsum(exposure)/sum(exposure)) %>% 
                    select(cum_exp, cum_loss))
 
+ggsave(filename = "GLM_gini.png", device = "png", width = 12, height = 6.75, dpi = 320, units = "in")
 
 
 glm_nrmse <- with(test_df,NRMSE(glm_amount_pred, amount)) # NRMSE
@@ -258,11 +260,10 @@ sum_table %>%
   geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
   scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$gam_pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
   labs(y = "Exposure",
-       x = "Absolute Difference",
+       x = "Absolute Value",
        colour = "Legend", title = "GAM Results")
 
-ggsave(filename = "GAM_results.png", device = "png")
-
+ggsave(filename = "GAM_results.png", device = "png",width = 12, height = 6.75, dpi = 320, units = "in")
 
 
 test_df %>% arrange(gam_amount_pred) %>% 
@@ -272,7 +273,8 @@ test_df %>% arrange(gam_amount_pred) %>%
   select(cum_loss, cum_exp) %>%
   ggplot()+
   geom_line(aes(x = cum_exp, y = cum_loss))+
-  geom_abline(slope = 1, intercept = 0)
+  geom_abline(slope = 1, intercept = 0)+
+  labs(title = "GAM Gini")
 
 
 gam_gini <- gini(test_df %>% arrange(gam_amount_pred) %>% 
@@ -281,6 +283,7 @@ gam_gini <- gini(test_df %>% arrange(gam_amount_pred) %>%
                           cum_exp = cumsum(exposure)/sum(exposure)) %>% 
                    select(cum_exp, cum_loss))
 
+ggsave(filename = "GAM_gini.png", device = "png",width = 12, height = 6.75, dpi = 320, units = "in")
 
 
 gam_nrmse <- NRMSE(test_df$gam_amount_pred, test_df$amount) # NRMSE
@@ -362,11 +365,10 @@ sum_table %>%
   geom_point(aes(x = diff_interval, y = obs_mean*( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), group=1, color = "Observed"))+
   scale_y_continuous(sec.axis = sec_axis(~./( max(sum_table$exposure)/max(sum_table$mars_pred_mean,sum_table$obs_mean) ), name = "Weighted Mean"))+
   labs(y = "Exposure",
-       x = "Absolute Difference",
+       x = "Absolute Value",
        colour = "Legend", title = "MARS Results")
 
-ggsave(filename = "MARS_results.png", device = "png")
-
+ggsave(filename = "MARS_results.png", device = "png", width = 12, height = 6.75, dpi = 320, units = "in")
 
 test_df %>% arrange(mars_amount_pred) %>% 
   mutate(mars_lc_pred = mars_amount_pred / exposure,
@@ -375,8 +377,8 @@ test_df %>% arrange(mars_amount_pred) %>%
   select(cum_loss, cum_exp) %>%
   ggplot()+
   geom_line(aes(x = cum_exp, y = cum_loss))+
-  geom_abline(slope = 1, intercept = 0)
-
+  geom_abline(slope = 1, intercept = 0)+
+  labs(title = "MARS Gini")
 
 
 mars_gini <- gini(test_df %>% arrange(mars_amount_pred) %>% 
@@ -385,6 +387,8 @@ mars_gini <- gini(test_df %>% arrange(mars_amount_pred) %>%
                           cum_exp = cumsum(exposure)/sum(exposure)) %>% 
                    select(cum_exp, cum_loss))
 
+
+ggsave(filename = "MARS_Gini.png", device = "png", width = 12, height = 6.75, dpi = 320, units = "in")
 
 mars_nrmse <- NRMSE(test_df$mars_amount_pred, test_df$amount) # NRMSE
 
