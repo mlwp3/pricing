@@ -1,12 +1,5 @@
 rm(list = ls())
 
-library(tidyverse)
-library(xgboost)
-library(Matrix)
-library(magrittr)
-library(caret)
-library(pracma)
-
 setwd("/home/marco/Documents/gitreps/pricing/final")
 
 source("./Utils/utils.R")
