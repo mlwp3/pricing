@@ -17,6 +17,10 @@ library(DALEX)
 library(splitstackshape)
 library(processx)
 library(ranger)
+library(caret)
+library(magrittr)
+library(pracma)
+library(tidyr)
 install_keras(tensorflow = "gpu")
 
 dat <- read.csv("freMPL.csv")
@@ -103,10 +107,71 @@ rmse <- function(data, targetvar, prediction.obj) {
   return(rmse)
 }
 
-NRMSE <- function(pred, obs){
-  
+NRMSE <- function(pred, obs) {
   RMSE(pred, obs)/(max(obs)-min(obs))
-  
+}
+
+gini_value <- function(predicted_loss_cost, exposure) {
+  lc_var <- enquo(predicted_loss_cost)
+  exp <- enquo(exposure)
+  dataset <- tibble(lc_var = !! lc_var, exp = !! exp)
+  dataset %>% 
+    arrange(lc_var) %>% 
+    mutate(cum_exp = cumsum(exp) / sum(exp),
+           cum_pred_lc = cumsum(lc_var) / sum(lc_var)) %$% 
+    {trapz(cum_exp, cum_pred_lc) %>% add(-1) %>% abs() %>% subtract(.5) %>% multiply_by(2)}
+}
+
+lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, n) {
+  pred_lc <- enquo(predicted_loss_cost)
+  obs_lc <- enquo(observed_loss_cost)
+  dataset <- tibble(pred_lc = !! pred_lc, obs_lc = !! obs_lc)
+  dataset %>% 
+    arrange(pred_lc) %>% 
+    mutate(buckets = ntile(pred_lc, n)) %>% 
+    group_by(buckets) %>% 
+    summarise(Predicted_Risk_Premium = mean(pred_lc),
+              Observed_Risk_Premium = mean(obs_lc))%>% 
+    tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
+    ggplot() +
+    geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
+    geom_point(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
+    xlab("Bucket") + ylab("Average Risk Premium")
+}
+
+double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod_2, observed_loss_cost, n) {
+  pred_lc_m1 <- enquo(predicted_loss_cost_mod_1)
+  pred_lc_m2 <- enquo(predicted_loss_cost_mod_2)
+  obs_lc <- enquo(observed_loss_cost)
+  dataset <- tibble(pred_lc_m1 = !! pred_lc_m1, pred_lc_m2 = !! pred_lc_m2, obs_lc = !! obs_lc)
+  dataset %>%
+    mutate(sort_ratio = pred_lc_m1 / pred_lc_m2) %>%
+    arrange(sort_ratio) %>% 
+    mutate(buckets = ntile(sort_ratio, n)) %>% 
+    group_by(buckets) %>% 
+    summarise(Model_1_Predicted_Risk_Premium = mean(pred_lc_m1),
+              Model_2_Predicted_Risk_Premium = mean(pred_lc_m2),
+              Observed_Risk_Premium = mean(obs_lc))%>% 
+    tidyr::pivot_longer(c(Model_1_Predicted_Risk_Premium, Model_2_Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
+    ggplot() +
+    geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
+    geom_point(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
+    xlab("Bucket") + ylab("Average Risk Premium")
+}
+
+gini_plot <- function(predicted_loss_cost, exposure) {
+  lc_var <- enquo(predicted_loss_cost)
+  exp <- enquo(exposure)
+  dataset <- tibble(lc_var = !! lc_var, exp = !! exp)
+  dataset %>% 
+    arrange(lc_var) %>% 
+    mutate(cum_exp = cumsum(exp) / sum(exp),
+           cum_pred_lc = cumsum(lc_var) / sum(lc_var)) %>% 
+    ggplot()+
+    geom_line(aes(x = cum_exp, y = cum_pred_lc))+
+    geom_abline(intercept = 0, slope = 1)+
+    xlab("Exposure") +
+    ylab("Predicted Loss Cost")
 }
 
 ##========BASELINE GLM==========##
@@ -134,6 +199,15 @@ rmse_glm
 
 nrmse_glm <- NRMSE(predictions_glm, test$ClaimAmount)
 nrmse_glm
+
+gini_glm <- gini_value(predictions_glm, test$exposure)
+gini_glm
+
+lift_curve_glm <- lift_curve_plot(predictions_glm, as.numeric(unlist(test[targetvar])), 10)
+lift_curve_glm + labs(col = "Model") + ggtitle("GLM Lift Curve")
+
+gini_index_plot_glm <- gini_plot(predictions_glm, as.numeric(unlist(test[, c("exposure")])))
+gini_index_plot_glm + ggtitle("Tweedie GLM Gini Index Plot")
 
 rm(targetvar)
 
@@ -257,8 +331,9 @@ predictions_mlp3_l1 <- mlp3 %>% predict(x_val[, -which(colnames(x_val) %in% c("e
 
 mlp4 <- keras_model_sequential()
 mlp4 %>%
-  layer_dense(units = 500, activation = "tanh", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
-  layer_dense(units = 1, activation = "tanh")
+  layer_dense(units = 500, activation = "sigmoid", input_shape = ncol(x_train[, -which(colnames(x_train) %in% c("exposure"))])) %>%
+  layer_dropout(0.4) %>%
+  layer_dense(units = 1, activation = "sigmoid")
 mlp4 <- multi_gpu_model(mlp4, gpus = 2)
 mlp4 %>%
   compile(loss = "mean_squared_error", optimizer = optimizer_rmsprop(lr = 0.01, rho = 0.9))
@@ -302,15 +377,29 @@ rm(i)
 l1_predictions <- (weights[1]*predictions_mlp1_l1) + (weights[2]*predictions_mlp2_l1) + (weights[3]*predictions_mlp3_l1) + (weights[4]*predictions_mlp4_l1) + (weights[5]*predictions_rf_l1)
 val_stack$l1_pred <- as.numeric(l1_predictions)
 #Level Two Modelling
+#params <- list(
+#  objective = "reg:tweedie", tweedie_variance_parameter = p, eval_metric = "rmse"
+#)
+#xgb_train <- xgb.DMatrix(cbind(x_val, l1_predictions), label = as.numeric(l1_predictions))
+#colnames(xgb_train)[length(colnames(xgb_train))] <- targetvar
+#min_exp <- min(x_val[, c("exposure")])
+#max_exp <- max(x_val[, c("exposure")])
+#offset <- log(x_val[, c("exposure")])
+#offset_scaled <- scale(offset, center = min_exp, scale = (max_exp - min_exp))
+#rm(min_exp, max_exp, offset)
+#setinfo(xgb_train, "base_margin", offset_scaled)
+#xgboost <- xgboost(data = xgb_train, params = params, nrounds = 50000, verbose = 1, max.depth = 10, eta = 0.1, 
+#                   early_stopping_rounds = 2500)
+#predictions_xgb_l2 <- predict(xgboost, xgb.DMatrix(cbind(x_test, y_test), label = as.numeric(y_test)))
+#predictions_l2 <- (predictions_xgb_l2 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 params <- list(
   objective = "reg:tweedie", eval_metric = "rmse", tweedie_variance_power = p
 )
 xgb_train <- xgb.DMatrix(cbind(x_val, l1_predictions), label = as.numeric(l1_predictions))
 colnames(xgb_train)[length(colnames(xgb_train))] <- targetvar
 setinfo(xgb_train, "base_margin", log(xgb_train[, c("exposure")]))
-xgboost <- xgboost(data = xgb_train, label = as.numeric(l1_predictions),
-                   params = params, nrounds = 50000, verbose = 1, max.depth = 10, eta = 0.1, 
-                   early_stopping_rounds = 1000)
+xgboost <- xgboost(data = xgb_train, params = params, nrounds = 50000, verbose = 1, max.depth = 10, 
+                   eta = 0.1, early_stopping_rounds = 2500)
 predictions_xgb_l2 <- predict(xgboost, xgb.DMatrix(cbind(x_test, y_test), label = as.numeric(y_test)))
 predictions_l2 <- (predictions_xgb_l2 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 
@@ -323,6 +412,30 @@ rmse_stack
 
 nrmse_stack <- NRMSE(test$STACK, test$ClaimAmount)
 nrmse_stack
+
+gini_stack<- gini_value(predictions_l2, test$exposure)
+gini_stack
+
+lift_curve_stack <- lift_curve_plot(predictions_l2, as.numeric(unlist(test[targetvar])), 10)
+lift_curve_stack + labs(col = "Model") +
+  ggtitle("ML Stack Lift Curve")
+
+double_lift_chart_glm_stack <- double_lift_chart(test$GLM, test$STACK, test$ClaimAmount, 10)
+double_lift_chart_glm_stack + ggtitle("Double Lift Chart - GLM (Model 1) vs. ML Stack (Model 2)") +
+  labs(col = "Model")
+
+gini_index_plot_stack <- gini_plot(predictions_l2, as.numeric(unlist(test[, c("exposure")])))
+gini_index_plot_stack + ggtitle("ML Stack Gini Index Plot")
+
+#Comparative Analytics Summary
+rmse <- c(rmse_glm, rmse_stack)
+rmse <- rmse * 100
+nrmse <- c(nrmse_glm, nrmse_stack)
+gini_indices <- c(gini_glm, gini_stack)
+models <- c("Tweedie GLM", "ML Stack")
+comp_stat_summary <- data.frame(models, rmse, nrmse, gini_indices)
+colnames(comp_stat_summary) <- c("Model", "RMSE", "NRMSE", "Gini Index")
+write.csv(comp_stat_summary, "~/comp_stat_summary.csv")
 
 #One-Way Analysis against Burning Cost for Vehicle Body
 grp_by_VehBody <- test %>%
@@ -363,6 +476,7 @@ plot_Garage <- plot_ly(data = grp_by_Garage, x = ~Garage, y = ~avg_clm, type = "
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_Garage
 
+#One-Way Analysis against Burning Cost for License Age
 grp_by_LicAge <- test %>%
   group_by(LicAge) %>%
   summarize(total_rate_glm = sum(GLM), exp = sum(exposure), total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount))
@@ -375,6 +489,7 @@ plot_LicAge <- plot_ly(data = grp_by_LicAge, x = ~LicAge, y = ~avg_clm, type = "
   add_trace(y = ~avg_rate_glm, mode = "lines", name = "GLM")
 plot_LicAge
 
+#One-Way Analysis against Burning Cost for Vehicle Age
 grp_by_VehAge <- test %>%
   group_by(VehAge) %>%
   summarize(total_rate_glm = sum(GLM), exp = sum(exposure), total_rate_stack = sum(STACK), total_clm = sum(ClaimAmount))
@@ -388,12 +503,12 @@ plot_VehAge <- plot_ly(data = grp_by_VehAge, x = ~VehAge, y = ~avg_clm, type = "
 plot_VehAge
 
 ##=======INTERPRETABILITY==========##
-
 #Trim out Dead Wood first
 rm(glm, grp_by_Garage, grp_by_Gender, grp_by_LicAge, grp_by_VehAge, grp_by_VehBody, l1_predictions, params, plot_Garage, plot_Gender, plot_LicAge, plot_VehAge,
    predictions_mlp1_l1, predictions_mlp2_l1, predictions_mlp3_l1, predictions_mlp4_l1, test_nn, tr_control, train_nn, train_stack, train_stack_bal, val_nn, val_stack,
    x_test, x_train, x_val, xgboost, y_test, y_train, y_val, l1_rmse, mlp1, mlp2, mlp3, mlp4, ord, p, predictions_glm, predictions_l2, predictions_rf_l1,
-   predictions_xgb_l2, rmse_1, rmse_2, rmse_3, rmse_4, rmse_5, soft_sum, top_15_socio_categ, weights, xgb_train, predictors, plot_VehBody, targetvat)
+   predictions_xgb_l2, rmse_1, rmse_2, rmse_3, rmse_4, rmse_5, soft_sum, top_15_socio_categ, weights, xgb_train, predictors, 
+   plot_VehBody, targetvar, dat_nn, fit)
 
 #Set up Model Formula
 targetvar <- c("STACK")
