@@ -14,9 +14,6 @@ NRMSE <- function(pred, obs){
 
 train <- read.csv("https://raw.githubusercontent.com/mlwp3/pricing/master/final/Data/train_final.csv")
 
-center <- function(x){
-	(x - mean(x))/sd(x)
-}
 train$Freq <- train$ClaimInd / train$exposure
 train$PurePrem <- train$ClaimAmount / train$exposure
 
@@ -43,18 +40,20 @@ sev_train <- train[which(train$ClaimAmount>0),]
 sev_train$PurePrem <- NULL
 sev_train$X <- NULL
 sev_train$Freq <- NULL
+sev_train$exposure <- NULL
 sev_mod <- earth(ClaimAmount ~ ., data=sev_train, degree=3)
 
 fs_pred <- predict(freq_mod, newdata=test)*predict(sev_mod, newdata=test)*test$exposure
-RMSE(fs_pred,test$ClaimAmount)
-NRMSE(fs_pred,test$ClaimAmount)
+RMSE(fs_pred,test$ClaimAmount) #2238.138
+NRMSE(fs_pred,test$ClaimAmount) #0.01444359
 
 
 train$ClaimAmount <- NULL
 train$Freq <- NULL
 train$ClaimInd <- NULL
+train$exposure <- NULL
 pp_mod <- earth(PurePrem ~ ., data=train, degree=3)
 
 pp_pred <- predict(pp_mod, newdata=test)*test$exposure
-RMSE(pp_pred,test$ClaimAmount)
-NRMSE(pp_pred,test$ClaimAmount)
+RMSE(pp_pred,test$ClaimAmount) #2025.51
+NRMSE(pp_pred,test$ClaimAmount) #0.01307142
