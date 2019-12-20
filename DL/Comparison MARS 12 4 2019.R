@@ -1,11 +1,16 @@
 library(earth)
-
+library(caret)
 library(plyr)
 library(tidyverse)
 library(broom)
 library(boot)
 
 rm(list=ls())
+NRMSE <- function(pred, obs){
+	
+	RMSE(pred, obs)/(max(obs)-min(obs))
+	
+}
 
 train <- read.csv("https://raw.githubusercontent.com/mlwp3/pricing/master/final/Data/train_final.csv")
 
@@ -40,11 +45,16 @@ sev_train$X <- NULL
 sev_train$Freq <- NULL
 sev_mod <- earth(ClaimAmount ~ ., data=sev_train, degree=3)
 
-sqrt(mean((predict(freq_mod, newdata=test)*predict(sev_mod, newdata=test)*test$exposure-test$ClaimAmount)^2)) #2215.84
+fs_pred <- predict(freq_mod, newdata=test)*predict(sev_mod, newdata=test)*test$exposure
+RMSE(fs_pred,test$ClaimAmount)
+NRMSE(fs_pred,test$ClaimAmount)
+
 
 train$ClaimAmount <- NULL
 train$Freq <- NULL
 train$ClaimInd <- NULL
 pp_mod <- earth(PurePrem ~ ., data=train, degree=3)
 
-sqrt(mean((predict(pp_mod, newdata=test)*test$exposure-test$ClaimAmount)^2)) #2007.867
+pp_pred <- predict(pp_mod, newdata=test)*test$exposure
+RMSE(pp_pred,test$ClaimAmount)
+NRMSE(pp_pred,test$ClaimAmount)
