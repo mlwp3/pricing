@@ -154,6 +154,9 @@ double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod
   base_observed_rp <- dataset[max_bucket, ]$Observed_Risk_Premium 
   dataset <- dataset %>%
     select(-Exposure) %>%
+    mutate(Model_1_Predicted_Risk_Premium = Model_1_Predicted_Risk_Premium / base_predicted_rp1, 
+           Model_2_Predicted_Risk_Premium = Model_2_Predicted_Risk_Premium / base_predicted_rp2,
+           Observed_Risk_Premium = Observed_Risk_Premium / base_observed_rp)
     tidyr::pivot_longer(c(Model_1_Predicted_Risk_Premium, Model_2_Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
     ggplot() +
     geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
