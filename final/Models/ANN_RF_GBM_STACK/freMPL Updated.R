@@ -98,7 +98,7 @@ train <- dat[-ind, ]
 test <- dat[ind, ]
 rm(ind)
 
-#Define RMSE and NRMSE for Model Evaluation
+#Define RMSE, NRMSE, Gini Index for Model Evaluation
 rmse <- function(data, targetvar, prediction.obj) {
   rss <- (as.numeric(prediction.obj) - as.numeric(unlist(data[, c(targetvar)]))) ^ 2
   mse <- sum(rss) / nrow(data)
@@ -122,36 +122,55 @@ gini_value <- function(predicted_loss_cost, exposure) {
     {trapz(cum_exp, cum_pred_lc) %>% add(-1) %>% abs() %>% subtract(.5) %>% multiply_by(2)}
 }
 
-lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, n) {
+#Lift Curve
+lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
   pred_lc <- enquo(predicted_loss_cost)
   obs_lc <- enquo(observed_loss_cost)
-  dataset <- tibble(pred_lc = !! pred_lc, obs_lc = !! obs_lc)
-  dataset %>% 
-    arrange(pred_lc) %>% 
-    mutate(buckets = ntile(pred_lc, n)) %>% 
+  exp <- enquo(exposure)
+  dataset <- tibble(pred_lc = !! pred_lc, obs_lc = !! obs_lc, exp = !! exp)
+  dataset <- dataset %>% 
+    arrange(exp) %>% 
+    mutate(buckets = ntile(exp, n)) %>% 
     group_by(buckets) %>% 
     summarise(Predicted_Risk_Premium = mean(pred_lc),
-              Observed_Risk_Premium = mean(obs_lc))%>% 
-    tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
-    ggplot() +
-    geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
-    geom_point(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
-    xlab("Bucket") + ylab("Average Risk Premium")
+              Observed_Risk_Premium = mean(obs_lc), 
+              Exposure = sum(exp))
+    max_bucket <- which.max(dataset$Exposure)
+    base_predicted_rp <- dataset[max_bucket, ]$Predicted_Risk_Premium
+    base_observed_rp <- dataset[max_bucket, ]$Observed_Risk_Premium
+    dataset <- dataset %>%
+      select(-Exposure) %>%
+      mutate(Predicted_Risk_Premium = Predicted_Risk_Premium / base_predicted_rp, 
+             Observed_Risk_Premium = Observed_Risk_Premium / base_observed_rp)  %>%
+      tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
+      ggplot() +
+      geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
+      geom_point(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
+      xlab("Bucket") + ylab("Average Risk Premium")
 }
 
-double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod_2, observed_loss_cost, n) {
+#Double Lift Curve
+double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod_2, observed_loss_cost, exposure, n) {
   pred_lc_m1 <- enquo(predicted_loss_cost_mod_1)
   pred_lc_m2 <- enquo(predicted_loss_cost_mod_2)
   obs_lc <- enquo(observed_loss_cost)
-  dataset <- tibble(pred_lc_m1 = !! pred_lc_m1, pred_lc_m2 = !! pred_lc_m2, obs_lc = !! obs_lc)
-  dataset %>%
+  exp <- enquo(exposure)
+  dataset <- tibble(pred_lc_m1 = !! pred_lc_m1, pred_lc_m2 = !! pred_lc_m2, obs_lc = !! obs_lc, exp = !! exp)
+  dataset <- dataset %>%
     mutate(sort_ratio = pred_lc_m1 / pred_lc_m2) %>%
-    arrange(sort_ratio) %>% 
-    mutate(buckets = ntile(sort_ratio, n)) %>% 
+    arrange(exp) %>% 
+    mutate(buckets = ntile(exp, n)) %>% 
     group_by(buckets) %>% 
     summarise(Model_1_Predicted_Risk_Premium = mean(pred_lc_m1),
               Model_2_Predicted_Risk_Premium = mean(pred_lc_m2),
-              Observed_Risk_Premium = mean(obs_lc))%>% 
+              Observed_Risk_Premium = mean(obs_lc), 
+              Exposure = sum(exp))
+  max_bucket <- which.max(dataset$Exposure)
+  base_predicted_rp1 <- dataset[max_bucket, ]$Model_1_Predicted_Risk_Premium
+  base_predicted_rp2 <- dataset[max_bucket, ]$Model_2_Predicted_Risk_Premium
+  base_observed_rp <- dataset[max_bucket, ]$Observed_Risk_Premium 
+  dataset <- dataset %>%
+    select(-Exposure) %>%
     tidyr::pivot_longer(c(Model_1_Predicted_Risk_Premium, Model_2_Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
     ggplot() +
     geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
@@ -159,6 +178,7 @@ double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod
     xlab("Bucket") + ylab("Average Risk Premium")
 }
 
+#Gini Plot
 gini_plot <- function(predicted_loss_cost, exposure) {
   lc_var <- enquo(predicted_loss_cost)
   exp <- enquo(exposure)
@@ -203,7 +223,7 @@ nrmse_glm
 gini_glm <- gini_value(predictions_glm, test$exposure)
 gini_glm
 
-lift_curve_glm <- lift_curve_plot(predictions_glm, as.numeric(unlist(test[targetvar])), 10)
+lift_curve_glm <- lift_curve_plot(predictions_glm, as.numeric(unlist(test[targetvar])), test$exposure, 10)
 lift_curve_glm + labs(col = "Model") + ggtitle("GLM Lift Curve")
 
 gini_index_plot_glm <- gini_plot(predictions_glm, as.numeric(unlist(test[, c("exposure")])))
@@ -342,31 +362,31 @@ fit <- fit(mlp4, x = x_train[, -which(colnames(x_train) %in% c("exposure"))], y 
 predictions_mlp4_l1 <- mlp4 %>% predict(x_val[, -which(colnames(x_val) %in% c("exposure"))])
 #predictions_mlp4_l1 <- (predictions_mlp4_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])
 
-h2o.init(min_mem_size = "255g")
-train_h2o <- as.h2o(cbind(x_train, y_train))
-colnames(train_h2o) <- colnames(cbind(x_train, y_train))
-train_h2o <- train_h2o[-1, ]
-rf_params <- list(ntrees = c(4000, 6000), max_depth = c(10, 25, 40))
-rf_grid <- h2o.grid("randomForest", x = colnames(train_h2o)[-which(colnames(train_h2o) %in% c(targetvar, "exposure"))], 
-                    y = targetvar, training_frame = train_h2o, seed = 13578, hyper_params = rf_params, grid_id = "rf_grid")
-rf_gridPerf <- h2o.getGrid("rf_grid", sort_by = "rmse", decreasing = FALSE)
-rf <- h2o.getModel(rf_gridPerf@model_ids[[1]])
-rm(train_h2o)
-predictions_rf_l1 <- h2o.predict(rf, as.h2o(x_val[-1, -which(colnames(x_val) %in% c("exposure"))]))
-predictions_rf_l1 <- as.numeric(as.list(predictions_rf_l1))
-rm(rf_params)
-rm(rf_grid)
-rm(rf_gridPerf)
-rm(rf)
-h2o.shutdown(prompt = FALSE)
+#h2o.init(min_mem_size = "255g")
+#train_h2o <- as.h2o(cbind(x_train, y_train))
+#colnames(train_h2o) <- colnames(cbind(x_train, y_train))
+#train_h2o <- train_h2o[-1, ]
+#rf_params <- list(ntrees = c(4000, 6000), max_depth = c(10, 25, 40))
+#rf_grid <- h2o.grid("randomForest", x = colnames(train_h2o)[-which(colnames(train_h2o) %in% c(targetvar, "exposure"))], 
+#                    y = targetvar, training_frame = train_h2o, seed = 13578, hyper_params = rf_params, grid_id = "rf_grid")
+#rf_gridPerf <- h2o.getGrid("rf_grid", sort_by = "rmse", decreasing = FALSE)
+#rf <- h2o.getModel(rf_gridPerf@model_ids[[1]])
+#rm(train_h2o)
+#predictions_rf_l1 <- h2o.predict(rf, as.h2o(x_val[-1, -which(colnames(x_val) %in% c("exposure"))]))
+#predictions_rf_l1 <- as.numeric(as.list(predictions_rf_l1))
+#rm(rf_params)
+#rm(rf_grid)
+#rm(rf_gridPerf)
+#rm(rf)
+#h2o.shutdown(prompt = FALSE)
 
 #Pull in Level 1 Predictions and Append to Validation Set for Level 2 - Set weights for each model based on individual predictive accuracy
 rmse_1 <- rmse(val_stack, targetvar, as.numeric((predictions_mlp1_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])))
 rmse_2 <- rmse(val_stack, targetvar, as.numeric((predictions_mlp2_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])))
 rmse_3 <- rmse(val_stack, targetvar, as.numeric((predictions_mlp3_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])))
 rmse_4 <- rmse(val_stack, targetvar, as.numeric((predictions_mlp4_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])))
-rmse_5 <- rmse(val_stack, targetvar, as.numeric((predictions_rf_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])))
-l1_rmse <- c(rmse_1, rmse_2, rmse_3, rmse_4, rmse_5)
+#rmse_5 <- rmse(val_stack, targetvar, as.numeric((predictions_rf_l1 * (max(dat_nn[targetvar]) - min(dat_nn[targetvar]))) + min(dat_nn[targetvar])))
+l1_rmse <- c(rmse_1, rmse_2, rmse_3, rmse_4)
 soft_sum <- sum(exp(l1_rmse)) 
 weights <- c()
 for (i in 1:length(l1_rmse)) {
@@ -374,7 +394,7 @@ for (i in 1:length(l1_rmse)) {
 }
 weights <- weights / sum(weights)
 rm(i)
-l1_predictions <- (weights[1]*predictions_mlp1_l1) + (weights[2]*predictions_mlp2_l1) + (weights[3]*predictions_mlp3_l1) + (weights[4]*predictions_mlp4_l1) + (weights[5]*predictions_rf_l1)
+l1_predictions <- (weights[1]*predictions_mlp1_l1) + (weights[2]*predictions_mlp2_l1) + (weights[3]*predictions_mlp3_l1) + (weights[4]*predictions_mlp4_l1)
 val_stack$l1_pred <- as.numeric(l1_predictions)
 #Level Two Modelling
 #params <- list(
@@ -416,11 +436,11 @@ nrmse_stack
 gini_stack<- gini_value(predictions_l2, test$exposure)
 gini_stack
 
-lift_curve_stack <- lift_curve_plot(predictions_l2, as.numeric(unlist(test[targetvar])), 10)
+lift_curve_stack <- lift_curve_plot(predictions_l2, as.numeric(unlist(test[targetvar])), test$exposure, 10)
 lift_curve_stack + labs(col = "Model") +
   ggtitle("ML Stack Lift Curve")
 
-double_lift_chart_glm_stack <- double_lift_chart(test$GLM, test$STACK, test$ClaimAmount, 10)
+double_lift_chart_glm_stack <- double_lift_chart(test$GLM, test$STACK, test$ClaimAmount, test$exposure, 10)
 double_lift_chart_glm_stack + ggtitle("Double Lift Chart - GLM (Model 1) vs. ML Stack (Model 2)") +
   labs(col = "Model")
 
