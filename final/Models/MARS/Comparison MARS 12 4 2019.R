@@ -38,15 +38,16 @@ sev_mod <- sev_train %>%
   select(-id) %>% 
   earth(ClaimAmount ~ ., data = ., degree = 3)
 
-
 fs_pred <- predict(freq_mod, newdata = test)*predict(sev_mod, newdata = test) * test$exposure
 RMSE(fs_pred,test$ClaimAmount) #2238.138
 NRMSE(fs_pred,test$ClaimAmount) #0.01444359
-gini_plot_fs <- gini_plot(as.numeric(fs_pred),test$exposure)
-gini_plot_fs + ggtitle("Frequency x Severity MARS Gini Plot")
 gini_value(as.numeric(fs_pred),test$exposure)
-lift_curve_fs <- lift_curve_plot(as.numeric(fs_pred),test$ClaimAmount,test$exposure,10)
-lift_curve_fs +  labs(col = "Model") + ggtitle("Frequency x Severity MARS Lift Curve")
+
+gini_plot_fs <- gini_plot(as.numeric(fs_pred),test$exposure) + 
+  ggtitle("Frequency x Severity MARS Gini Plot")
+
+lift_curve_fs <- lift_curve_plot(as.numeric(fs_pred),test$ClaimAmount,test$exposure,10) +  
+  labs(col = "Model") + ggtitle("Frequency x Severity MARS Lift Curve")
 
 train$ClaimAmount <- NULL
 train$Freq <- NULL
@@ -59,8 +60,10 @@ pp_mod <- train %>%
 pp_pred <- predict(pp_mod, newdata = test)*test$exposure
 RMSE(pp_pred,test$ClaimAmount) #2025.51
 NRMSE(pp_pred,test$ClaimAmount) #0.01307142
-gini_plot_pp <- gini_plot(as.numeric(pp_pred),test$exposure)
-gini_plot_pp + ggtitle("Pure Premium MARS Gini Plot")
 gini_value(as.numeric(pp_pred),test$exposure)
-lift_curve_pp <- lift_curve_plot(as.numeric(pp_pred),test$ClaimAmount,test$exposure,10)
-lift_curve_pp + labs(col = "Model") + ggtitle("Pure Premium MARS Lift Curve")
+
+gini_plot_pp <- gini_plot(as.numeric(pp_pred),test$exposure) + 
+  ggtitle("Pure Premium MARS Gini Plot")
+
+lift_curve_pp <- lift_curve_plot(as.numeric(pp_pred),test$ClaimAmount,test$exposure,10) + 
+  labs(col = "Model") + ggtitle("Pure Premium MARS Lift Curve")
