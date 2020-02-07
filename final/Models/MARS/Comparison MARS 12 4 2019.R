@@ -8,8 +8,6 @@ library(Matrix)
 library(magrittr)
 library(pracma)
 
-rm(list=ls())
-
 source("final/Utils/utils.R")
 
 train <- import_data("final/Data/train_final.csv") %>% mutate(id = "train")
