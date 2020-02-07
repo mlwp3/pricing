@@ -131,14 +131,11 @@ gini_plot <- function(predicted_loss_cost, exposure){
 
 lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
   
-  pred_lc <- enquo(predicted_loss_cost)
-  obs_lc <- enquo(observed_loss_cost)
-  exp <- enquo(exposure)
-  
   dataset <- tibble(
-    pred_lc = !! pred_lc
-    , obs_lc = !! obs_lc
-    , exp = !! exp)
+    pred_lc = predicted_loss_cost
+    , obs_lc = observed_loss_cost
+    , exp = exposure
+  )
   
   dataset <- dataset %>% 
     arrange(exp) %>% 
