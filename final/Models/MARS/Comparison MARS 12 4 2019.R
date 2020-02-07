@@ -5,8 +5,6 @@ library(tidyverse)
 library(broom)
 library(boot)
 library(Matrix)
-library(readr)
-library(dplyr)
 library(magrittr)
 library(pracma)
 
