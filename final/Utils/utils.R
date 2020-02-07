@@ -91,23 +91,14 @@ gini_value <- function(predicted_loss_cost, exposure){
 #-------------------
 # Plot functions
 
+text_project <- element_text(size = 18)
+
 theme_project <- theme(
-  axis.title = element_text(size = 18)
+  axis.title = text_project
+  , legend.text = text_project
+  , axis.text = text_project
   , legend.position = 'bottom'
-  , legend.text = element_text(size = 18)
 )
-
-geom_project <- function() {
-  
-  update_geom_defaults(
-    'line', list(size = 4))
-  
-  update_geom_defaults(
-    'point', list(size = 4)
-  )
-  
-}
-
 
 gini_plot <- function(predicted_loss_cost, exposure){
   
@@ -171,9 +162,10 @@ lift_curve_plot <- function(tbl_in) {
   
   tbl_in %>% 
     tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>% 
+    mutate(buckets = as.factor(buckets)) %>% 
     ggplot(aes(x = buckets, y = value, col = name, group = name)) +
+    geom_point(size = 3.5) +
     geom_line(size = 4) +
-    geom_point(size = 4) +
     labs(x = "Bucket", y = "Average Risk Premium") + 
     theme_project
 }
