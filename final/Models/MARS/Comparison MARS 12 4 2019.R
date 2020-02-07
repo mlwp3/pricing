@@ -1,12 +1,5 @@
 library(earth)
-library(caret)
-library(plyr)
 library(tidyverse)
-library(broom)
-library(boot)
-library(Matrix)
-library(magrittr)
-library(pracma)
 
 source("final/Utils/utils.R")
 
