@@ -30,19 +30,19 @@ freq_train$ClaimAmount <- NULL
 freq_train$PurePrem <- NULL
 freq_train$X <- NULL
 
-freq_mod <- earth(Freq ~ ., data=freq_train, degree=3)
+freq_mod <- earth(Freq ~ ., data = freq_train, degree = 3)
 
 #The severity model is based on only those claims for which the claim amount is nonzero.
-sev_train <- train[which(train$ClaimAmount>0),]
+sev_train <- train[which(train$ClaimAmount > 0),]
 
 sev_train$PurePrem <- NULL
 sev_train$X <- NULL
 sev_train$Freq <- NULL
 sev_train$exposure <- NULL
-sev_mod <- earth(ClaimAmount ~ ., data=sev_train, degree=3)
+sev_mod <- earth(ClaimAmount ~ ., data = sev_train, degree = 3)
 
 
-fs_pred <- predict(freq_mod, newdata=test)*predict(sev_mod, newdata=test)*test$exposure
+fs_pred <- predict(freq_mod, newdata = test)*predict(sev_mod, newdata = test) * test$exposure
 RMSE(fs_pred,test$ClaimAmount) #2238.138
 NRMSE(fs_pred,test$ClaimAmount) #0.01444359
 gini_plot_fs <- gini_plot(as.numeric(fs_pred),test$exposure)
@@ -55,13 +55,13 @@ train$ClaimAmount <- NULL
 train$Freq <- NULL
 train$ClaimInd <- NULL
 train$exposure <- NULL
-pp_mod <- earth(PurePrem ~ ., data=train, degree=3)
+pp_mod <- earth(PurePrem ~ ., data = train, degree = 3)
 
-pp_pred <- predict(pp_mod, newdata=test)*test$exposure
+pp_pred <- predict(pp_mod, newdata = test)*test$exposure
 RMSE(pp_pred,test$ClaimAmount) #2025.51
 NRMSE(pp_pred,test$ClaimAmount) #0.01307142
 gini_plot_pp <- gini_plot(as.numeric(pp_pred),test$exposure)
 gini_plot_pp + ggtitle("Pure Premium MARS Gini Plot")
 gini_value(as.numeric(pp_pred),test$exposure)
 lift_curve_pp <- lift_curve_plot(as.numeric(pp_pred),test$ClaimAmount,test$exposure,10)
-lift_curve_pp + labs(col="Model") + ggtitle("Pure Premium MARS Lift Curve")
+lift_curve_pp + labs(col = "Model") + ggtitle("Pure Premium MARS Lift Curve")
