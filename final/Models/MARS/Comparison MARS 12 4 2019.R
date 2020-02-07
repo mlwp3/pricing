@@ -10,101 +10,14 @@ library(pracma)
 
 rm(list=ls())
 
-NRMSE <- function(pred, obs){
-	
-	RMSE(pred, obs)/(max(obs)-min(obs))
-	
-}
+source("final/Utils/utils.R")
 
-gini_value <- function(predicted_loss_cost, exposure) {
-	lc_var <- enquo(predicted_loss_cost)
-	exp <- enquo(exposure)
-	dataset <- tibble(lc_var = !! lc_var, exp = !! exp)
-	dataset %>% 
-		arrange(lc_var) %>% 
-		mutate(cum_exp = cumsum(exp) / sum(exp),
-					 cum_pred_lc = cumsum(lc_var) / sum(lc_var)) %$% 
-					 {trapz(cum_exp, cum_pred_lc) %>% add(-1) %>% abs() %>% subtract(.5) %>% multiply_by(2)}
-}
+train <- import_data("final/Data/train_final.csv") %>% mutate(id = "train")
 
-#Lift Curve
-lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
-	pred_lc <- enquo(predicted_loss_cost)
-	obs_lc <- enquo(observed_loss_cost)
-	exp <- enquo(exposure)
-	dataset <- tibble(pred_lc = !! pred_lc, obs_lc = !! obs_lc, exp = !! exp)
-	dataset <- dataset %>% 
-		arrange(exp) %>% 
-		mutate(buckets = ntile(exp, n)) %>% 
-		group_by(buckets) %>% 
-		summarise(Predicted_Risk_Premium = mean(pred_lc),
-							Observed_Risk_Premium = mean(obs_lc), 
-							Exposure = sum(exp))
-	max_bucket <- which.max(dataset$Exposure)
-	base_predicted_rp <- dataset[max_bucket, ]$Predicted_Risk_Premium
-	base_observed_rp <- dataset[max_bucket, ]$Observed_Risk_Premium
-	dataset <- dataset %>%
-		select(-Exposure) %>%
-		mutate(Predicted_Risk_Premium = Predicted_Risk_Premium / base_predicted_rp, 
-					 Observed_Risk_Premium = Observed_Risk_Premium / base_observed_rp)  %>%
-		tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
-		ggplot() +
-		geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
-		geom_point(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
-		xlab("Bucket") + ylab("Average Risk Premium")
-}
-
-#Double Lift Curve
-double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod_2, observed_loss_cost, exposure, n) {
-	pred_lc_m1 <- enquo(predicted_loss_cost_mod_1)
-	pred_lc_m2 <- enquo(predicted_loss_cost_mod_2)
-	obs_lc <- enquo(observed_loss_cost)
-	exp <- enquo(exposure)
-	dataset <- tibble(pred_lc_m1 = !! pred_lc_m1, pred_lc_m2 = !! pred_lc_m2, obs_lc = !! obs_lc, exp = !! exp)
-	dataset <- dataset %>%
-		mutate(sort_ratio = pred_lc_m1 / pred_lc_m2) %>%
-		arrange(exp) %>% 
-		mutate(buckets = ntile(exp, n)) %>% 
-		group_by(buckets) %>% 
-		summarise(Model_1_Predicted_Risk_Premium = mean(pred_lc_m1),
-							Model_2_Predicted_Risk_Premium = mean(pred_lc_m2),
-							Observed_Risk_Premium = mean(obs_lc), 
-							Exposure = sum(exp))
-	max_bucket <- which.max(dataset$Exposure)
-	base_predicted_rp1 <- dataset[max_bucket, ]$Model_1_Predicted_Risk_Premium
-	base_predicted_rp2 <- dataset[max_bucket, ]$Model_2_Predicted_Risk_Premium
-	base_observed_rp <- dataset[max_bucket, ]$Observed_Risk_Premium 
-	dataset <- dataset %>%
-		select(-Exposure) %>%
-		tidyr::pivot_longer(c(Model_1_Predicted_Risk_Premium, Model_2_Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
-		ggplot() +
-		geom_line(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
-		geom_point(aes(x = as.factor(buckets), y = value, col = name, group = name)) +
-		xlab("Bucket") + ylab("Average Risk Premium")
-}
-
-#Gini Plot
-gini_plot <- function(predicted_loss_cost, exposure) {
-	lc_var <- enquo(predicted_loss_cost)
-	exp <- enquo(exposure)
-	dataset <- tibble(lc_var = !! lc_var, exp = !! exp)
-	dataset %>% 
-		arrange(lc_var) %>% 
-		mutate(cum_exp = cumsum(exp) / sum(exp),
-					 cum_pred_lc = cumsum(lc_var) / sum(lc_var)) %>% 
-		ggplot()+
-		geom_line(aes(x = cum_exp, y = cum_pred_lc))+
-		geom_abline(intercept = 0, slope = 1)+
-		xlab("Exposure") +
-		ylab("Predicted Loss Cost")
-}
-
-train <- read.csv("https://raw.githubusercontent.com/mlwp3/pricing/master/final/Data/train_final.csv")
+test <- import_data("final/Data/test_final.csv") %>% mutate(id = "test")
 
 train$Freq <- train$ClaimInd / train$exposure
 train$PurePrem <- train$ClaimAmount / train$exposure
-
-test <- read.csv("https://raw.githubusercontent.com/mlwp3/pricing/master/final/Data/test_final.csv")
 
 test$Freq <- test$ClaimInd / test$exposure
 test$PurePrem <- test$ClaimAmount / test$exposure
