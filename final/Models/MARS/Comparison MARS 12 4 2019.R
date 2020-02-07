@@ -30,7 +30,9 @@ freq_train$ClaimAmount <- NULL
 freq_train$PurePrem <- NULL
 freq_train$X <- NULL
 
-freq_mod <- earth(Freq ~ ., data = freq_train, degree = 3)
+freq_mod <- freq_train %>% 
+  select(-id) %>% 
+  earth(Freq ~ ., data = ., degree = 3)
 
 #The severity model is based on only those claims for which the claim amount is nonzero.
 sev_train <- train[which(train$ClaimAmount > 0),]
@@ -39,7 +41,9 @@ sev_train$PurePrem <- NULL
 sev_train$X <- NULL
 sev_train$Freq <- NULL
 sev_train$exposure <- NULL
-sev_mod <- earth(ClaimAmount ~ ., data = sev_train, degree = 3)
+sev_mod <- sev_train %>% 
+  select(-id) %>% 
+  earth(ClaimAmount ~ ., data = ., degree = 3)
 
 
 fs_pred <- predict(freq_mod, newdata = test)*predict(sev_mod, newdata = test) * test$exposure
@@ -55,7 +59,9 @@ train$ClaimAmount <- NULL
 train$Freq <- NULL
 train$ClaimInd <- NULL
 train$exposure <- NULL
-pp_mod <- earth(PurePrem ~ ., data = train, degree = 3)
+pp_mod <- train %>% 
+  select(-id) %>% 
+  earth(PurePrem ~ ., data = ., degree = 3)
 
 pp_pred <- predict(pp_mod, newdata = test)*test$exposure
 RMSE(pp_pred,test$ClaimAmount) #2025.51
