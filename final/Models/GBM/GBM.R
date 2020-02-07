@@ -1,6 +1,6 @@
 rm(list = ls())
 
-setwd("/home/marco/Documents/gitreps/pricing/final")
+setwd("/home/marco/Documents/gitrepos/pricing/final")
 
 source("./Utils/utils.R")
 
