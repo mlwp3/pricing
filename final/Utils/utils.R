@@ -129,7 +129,7 @@ gini_plot <- function(predicted_loss_cost, exposure){
   
 }
 
-lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
+lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
   
   dataset <- tibble(
     pred_lc = predicted_loss_cost
@@ -142,23 +142,31 @@ lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n
     mutate(buckets = ntile(exp, n)) %>% 
     group_by(buckets) %>% 
     summarise(
-      Predicted_Risk_Premium = mean(pred_lc)
-      , Observed_Risk_Premium = mean(obs_lc)
+      Predicted_Risk_Premium = mean(pred_lc, na.rm = TRUE)
+      , Observed_Risk_Premium = mean(obs_lc, na.rm = TRUE)
       , Exposure = sum(exp)
     )
   
   max_bucket <- which.max(dataset$Exposure)
-  base_predicted_rp <- dataset[max_bucket, ]$Predicted_Risk_Premium
-  base_observed_rp <- dataset[max_bucket, ]$Observed_Risk_Premium
-
+  dataset <- dataset %>% 
+    mutate(
+      base_predicted_rp = dataset[max_bucket, ]$Predicted_Risk_Premium
+      , base_observed_rp = dataset[max_bucket, ]$Observed_Risk_Premium
+    )
+  
   dataset %>%
     select(-Exposure) %>%
     mutate(
       Predicted_Risk_Premium = Predicted_Risk_Premium / base_predicted_rp
       , Observed_Risk_Premium = Observed_Risk_Premium / base_observed_rp
       , buckets = as.factor(buckets)
-    )  %>%
-    tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
+    )  
+}
+
+lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
+  
+  lift_curve_table(predicted_loss_cost, observed_loss_cost, exposure, n) %>% 
+    tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium))
     ggplot(aes(x = buckets, y = value, col = name, group = name)) +
     geom_line(size = 4) +
     geom_point(size = 4) +
