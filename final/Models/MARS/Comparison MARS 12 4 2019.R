@@ -46,8 +46,11 @@ gini_value(as.numeric(fs_pred),test$exposure)
 gini_plot_fs <- gini_plot(as.numeric(fs_pred),test$exposure) + 
   ggtitle("Frequency x Severity MARS Gini Plot")
 
-lift_curve_fs <- lift_curve_plot(as.numeric(fs_pred),test$ClaimAmount,test$exposure,10) +  
-  labs(col = "Model") + ggtitle("Frequency x Severity MARS Lift Curve")
+tbl_lift_fs <- lift_curve_table(as.numeric(fs_pred), test$ClaimAmount, test$exposure,10)
+plt_lift_fs <- tbl_lift_fs %>% 
+  lift_curve_plot() +   
+  labs(col = "Model")
+plt_lift_fs
 
 train$ClaimAmount <- NULL
 train$Freq <- NULL
@@ -65,5 +68,10 @@ gini_value(as.numeric(pp_pred),test$exposure)
 gini_plot_pp <- gini_plot(as.numeric(pp_pred),test$exposure) + 
   ggtitle("Pure Premium MARS Gini Plot")
 
-lift_curve_pp <- lift_curve_plot(as.numeric(pp_pred),test$ClaimAmount,test$exposure,10) + 
-  labs(col = "Model") + ggtitle("Pure Premium MARS Lift Curve")
+tbl_lift_pp <- lift_curve_table(as.numeric(pp_pred),test$ClaimAmount,test$exposure,10)
+
+plt_lift_pp <- tbl_lift_pp %>% 
+  lift_curve_plot() + 
+  labs(col = "Model")
+
+plt_lift_pp
