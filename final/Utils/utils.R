@@ -138,7 +138,6 @@ lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, 
   )
   
   dataset <- dataset %>% 
-    arrange(exp) %>% 
     mutate(buckets = ntile(exp, n)) %>% 
     group_by(buckets) %>% 
     summarise(
@@ -155,18 +154,23 @@ lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, 
     )
   
   dataset %>%
-    select(-Exposure) %>%
     mutate(
       Predicted_Risk_Premium = Predicted_Risk_Premium / base_predicted_rp
       , Observed_Risk_Premium = Observed_Risk_Premium / base_observed_rp
       , buckets = as.factor(buckets)
-    )  
+    ) %>% 
+    arrange(Predicted_Risk_Premium) %>% 
+    mutate(
+      buckets = seq_len(nrow(.))
+    ) %>% 
+    select(-Exposure)
+    
 }
 
-lift_curve_plot <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
+lift_curve_plot <- function(tbl_in) {
   
-  lift_curve_table(predicted_loss_cost, observed_loss_cost, exposure, n) %>% 
-    tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium))
+  tbl_in %>% 
+    tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>% 
     ggplot(aes(x = buckets, y = value, col = name, group = name)) +
     geom_line(size = 4) +
     geom_point(size = 4) +
