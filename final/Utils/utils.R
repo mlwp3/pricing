@@ -10,63 +10,43 @@ library(pracma)
 
 import_data <- function(data){
   
-  read_csv(data, 
-           col_types = cols(Gender = col_character(), 
-                            VehAge = col_character(), 
-                            HasKmLimit = col_factor())) %>% 
+  read_csv(data, col_types = cols(Freq = col_skip())) %>% 
     mutate_if(is.character, as.factor) %>% 
-    filter((ClaimInd==0 & ClaimAmount==0) | (ClaimInd>0 & ClaimAmount>0)) %>% 
-    mutate(sev = ifelse(ClaimInd == 0, 0, ClaimAmount / ClaimInd))
+    filter((ClaimNb==0 & ClaimAmount==0) | (ClaimNb>0 & ClaimAmount>0)) %>% 
+    mutate(sev = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb))
   
 }
 
 create_data_numb <- function(data){
   
-  sparse.model.matrix(ClaimInd ~
-                        LicAge +
-                        VehAge +
-                        Gender +
-                        MariStat +
-                        SocioCateg +
-                        VehUsage +
-                        DrivAge +
-                        HasKmLimit +
+  sparse.model.matrix(ClaimNb ~
+                        Area +
+                        VehPower +
                         BonusMalus +
-                        VehBody +
-                        VehPrice +
-                        VehEngine +
-                        VehEnergy      +
-                        VehMaxSpeed +
-                        VehClass +
-                        Garage +
-                        LicAge_Band +
-                        BonusMalus_Cat +
-                        DrivAge_Band +
-                        VehPriceGrp, data = data)}
+                        VehBrand +
+                        VehGas +
+                        Region +
+                        ClaimAmount +
+                        DrivAgeBand +
+                        DensityBand +
+                        VehAgeBand +
+                        Exposure,
+                      data = data)}
 
 create_data_sev <- function(data){
   
   sparse.model.matrix(sev ~
-                        LicAge +
-                        VehAge +
-                        Gender +
-                        MariStat +
-                        SocioCateg +
-                        VehUsage +
-                        DrivAge +
-                        HasKmLimit +
+                        Area +
+                        VehPower +
                         BonusMalus +
-                        VehBody +
-                        VehPrice +
-                        VehEngine +
-                        VehEnergy      +
-                        VehMaxSpeed +
-                        VehClass +
-                        Garage +
-                        LicAge_Band +
-                        BonusMalus_Cat +
-                        DrivAge_Band +
-                        VehPriceGrp, data = data)}
+                        VehBrand +
+                        VehGas +
+                        Region +
+                        ClaimAmount +
+                        DrivAgeBand +
+                        DensityBand +
+                        VehAgeBand, 
+                      data = data)}
 
 NRMSE <- function(pred, obs){
   
