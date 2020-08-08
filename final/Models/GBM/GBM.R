@@ -8,12 +8,12 @@ source("./Utils/utils.R")
 
 # Import Data -------------------------------------------------------------
 
-train <- import_data("./Data/train_new_final.csv") # %>% mutate(id = "train")
+train <- import_data("./Data/train_new_final.csv")
 
-test <- import_data("./Data/test_new_final.csv") # %>% mutate(id = "test")
+test <- import_data("./Data/test_new_final.csv")
 
 xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
-
+ 
 xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
 
 # Add Variables -----------------------------------------------------------
@@ -26,11 +26,11 @@ test_data_numb <- create_data_numb(test)
  
 test_data_sev <- create_data_sev(test)
 
-train_numb <- xgb.DMatrix(data = train_data_numb, label = train %>% pull(ClaimNb))
+train_numb <- xgb.DMatrix(data = train_data_numb, label = train %>% pull(ClaimNb), base_margin = log(train$Exposure))
 
 train_sev <- xgb.DMatrix(data = train_data_sev, label = filter(train, sev > 0) %>% pull(sev))
 
-test_numb <- xgb.DMatrix(data = test_data_numb, label = test %>% pull(ClaimNb))
+test_numb <- xgb.DMatrix(data = test_data_numb, label = test %>% pull(ClaimNb), base_margin = log(train$Exposure))
 
 test_sev <- xgb.DMatrix(data = test_data_sev, label = test %>% pull(sev))
 
@@ -43,9 +43,11 @@ test_sev <- xgb.DMatrix(data = test_data_sev, label = test %>% pull(sev))
 # params <- list(booster = "gbtree",
 #                objective = "count:poisson",
 #                eval_metric = "poisson-nloglik",
+#                tree_method = "gpu_hist",
 #                eta = 0.1,
 #                gamma = 1,
-#                max_depth = 6)
+#                max_depth = 6,
+#                base_score = 1)
 # 
 # 
 # xgbcv <- xgb.cv(params = params,
@@ -65,6 +67,8 @@ test_sev <- xgb.DMatrix(data = test_data_sev, label = test %>% pull(sev))
 #                             nrounds = which.min(xgbcv$evaluation_log$train_poisson_nloglik_mean),
 #                             verbose = 1,
 #                             print_every_n = 10)
+# 
+# xgb.save(xgb_model_numb, "./Models/GBM/xgb_numbers")
 
 numb_pred <- predict(xgb_model_numb, test_numb)
 
@@ -75,7 +79,8 @@ numb_pred <- predict(xgb_model_numb, test_numb)
 # params <- list(booster = "gbtree",
 #                eval_metric = "gamma-nloglik",
 #                objective = "reg:gamma",
-#                eta = .1,
+#                tree_method = "gpu_hist",
+#                eta = .01,
 #                gamma = 1,
 #                max_depth = 10)
 # 
@@ -83,7 +88,7 @@ numb_pred <- predict(xgb_model_numb, test_numb)
 # xgbcv <- xgb.cv(params = params,
 #                 data = train_sev,
 #                 weight = train$ClaimNb,
-#                 nrounds = 1000,
+#                 nrounds = 10000,
 #                 nfold = 5,
 #                 showsd = TRUE,
 #                 stratified = TRUE,
@@ -99,6 +104,8 @@ numb_pred <- predict(xgb_model_numb, test_numb)
 #                            nrounds = which.min(xgbcv$evaluation_log$train_gamma_nloglik_mean),
 #                            verbose = 1,
 #                            print_every_n = 100)
+# 
+# xgb.save(xgb_model_sev, "./Models/GBM/xgb_severity")
 
 sev_pred <- predict(xgb_model_sev, test_sev)
 
@@ -106,7 +113,6 @@ sev_pred <- predict(xgb_model_sev, test_sev)
 
 test <- test %>% mutate(observed_lc = ClaimAmount / Exposure,
                         predicted_lc = numb_pred * sev_pred / Exposure)
-
 
 # Performance Evaluation --------------------------------------------------
 
@@ -119,4 +125,3 @@ eval_dataset %$% gini_plot(predicted_lc, Exposure)
 eval_dataset %$% gini_value(predicted_lc, Exposure)
   
 eval_dataset %$% {lift_curve_table(predicted_lc, observed_lc, Exposure, 20) %>% lift_curve_plot()}
-

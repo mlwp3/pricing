@@ -1,4 +1,3 @@
-
 library(tidyverse)
 library(xgboost)
 library(Matrix)
@@ -30,7 +29,7 @@ create_data_numb <- function(data){
                         DrivAgeBand +
                         DensityBand +
                         VehAgeBand +
-                        Exposure,
+                        0,
                       data = data)}
 
 create_data_sev <- function(data){
@@ -45,7 +44,8 @@ create_data_sev <- function(data){
                         ClaimAmount +
                         DrivAgeBand +
                         DensityBand +
-                        VehAgeBand, 
+                        VehAgeBand +
+                        0, 
                       data = data)}
 
 NRMSE <- function(pred, obs){
