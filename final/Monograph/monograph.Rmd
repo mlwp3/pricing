@@ -1,0 +1,14 @@
+---
+title: "ML in Pricing"
+author: "MLWP3"
+date: "8/17/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Chapter 1
+
+some text here....
