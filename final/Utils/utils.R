@@ -10,8 +10,9 @@ library(tweedie)
 
 import_data <- function(data){
   read_csv(data, col_types = cols(VehPower = col_character(),
-                                  Freq = col_skip(),
-                                  BonusMalus = col_skip())) %>% 
+                                  BonusMalus = col_skip(),
+                                  Density = col_skip(),
+                                  severity = col_skip())) %>% 
     mutate_if(is.character, as.factor) %>% 
     filter((ClaimNb==0 & ClaimAmount==0) | (ClaimNb>0 & ClaimAmount>0))
 }
