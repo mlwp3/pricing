@@ -10,7 +10,9 @@ source("./Utils/utils.R")
 
 train <- import_data("./Data/train_new_final.csv") %>% group_data()
 
-test <- import_data("./Data/test_new_final.csv") %>% group_data()
+test <- import_data("./Data/test_new_final.csv") %>% 
+        mutate(Severity = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb),
+               Loss_Cost = ClaimAmount / Exposure)
 
 df <- train %>% mutate(id = row_number())
 
@@ -20,12 +22,11 @@ validation <- anti_join(df, train, by = "id") %>% select(-id)
 
 train <- train %>% select(-id)
 
-# xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
-#  
-# xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
-#
-# xgb_model_lc <- xgb.load("./Models/GBM/xgb_loss_cost")
+xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
 
+xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
+
+xgb_model_lc <- xgb.load("./Models/GBM/xgb_loss_cost")
 
 # Create datasets for xgboost ---------------------------------------------
 
@@ -78,7 +79,7 @@ test_lc <- xgb.DMatrix(data = create_data_lc(test),
 # 
 # xgbcv_numb <- xgb.cv(params = params,
 #                      data = train_numb,
-#                      nrounds = 1000,
+#                      nrounds = 10000,
 #                      nfold = 5,
 #                      showsd = FALSE,
 #                      stratified = TRUE,
@@ -115,7 +116,7 @@ numb_pred <- predict(xgb_model_numb, test_numb)
 # 
 # xgbcv_sev <- xgb.cv(params = params,
 #                     data = train_sev,
-#                     nrounds = 1000,
+#                     nrounds = 10000,
 #                     nfold = 5,
 #                     showsd = FALSE,
 #                     stratified = FALSE,
@@ -153,7 +154,7 @@ sev_pred <- predict(xgb_model_sev, test_sev)
 # 
 # xgbcv_lc <- xgb.cv(params = params,
 #                    data = train_lc,
-#                    nrounds = 1000,
+#                    nrounds = 10000,
 #                    nfold = 5,
 #                    print_every_n = 100,
 #                    showsd = FALSE,
@@ -172,7 +173,7 @@ sev_pred <- predict(xgb_model_sev, test_sev)
 
 importance_matrix_lc <- xgb.importance(colnames(train_lc), model = xgb_model_lc)
 
-xgb.ggplot.importance(importance_matrix_lc, rel_to_first = TRUE, top_n = 10, n_clusters = 3) + 
+xgb.ggplot.importance(importance_matrix_lc, rel_to_first = TRUE, top_n = 10, n_clusters = 3) +
   ggtitle("Feature Importance Loss Cost") + ggsave("./Output/GBM/feat_imp_lc.png")
 
 lc_pred <- predict(xgb_model_lc, test_lc)
@@ -180,6 +181,8 @@ lc_pred <- predict(xgb_model_lc, test_lc)
 # Predictions
 
 test <- test %>% mutate(observed_lc = ClaimAmount / Exposure,
+                        predicted_numb = numb_pred,
+                        predicted_sev = sev_pred,
                         predicted_lc = numb_pred * sev_pred / Exposure,
                         predicted_lc_tw = lc_pred)
 
@@ -209,3 +212,16 @@ eval_dataset %$% lift_curve_table(predicted_lc_tw, observed_lc, Exposure, 20) %>
 
 eval_dataset %$% double_lift_chart(predicted_lc, predicted_lc_tw, observed_lc, Exposure, 20, "Freq / Sev", "Loss Cost") + 
                  ggtitle("Double Lift Curve") + ggsave("./Output/GBM/double_lift_curve.png")
+
+# Export Final ------------------------------------------------------------
+
+test %>% select(RecordID,
+                Exposure,
+                ClaimNb,
+                Loss_Cost,
+                Severity,
+                predicted_numb,
+                predicted_sev,
+                predicted_lc_freq_sev = predicted_lc,
+                predicted_lc = predicted_lc_tw) %>% 
+  write_csv("./Output/GBM/dataset_predictions.csv")
