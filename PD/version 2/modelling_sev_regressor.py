@@ -30,20 +30,18 @@ data_train_raw = dc.clean_data(data_train_raw)
 data_test = data_test_raw.copy()
 data_train = data_train_raw.copy()
 
-#%%########################################################################
-#
-# Frequency Projection
-#
 
 #%% set target
-#data_train['freq'] = data_train['ClaimNb']/data_train['Exposure']
-#data_test['freq'] = data_test['ClaimNb']/data_test['Exposure']
-#target_name='freq'
+target_name='severity'
 
-target_name='ClaimNb'
+#cap large claims
+severity_cap = 5e3
+data_train[target_name] = data_train[target_name].where(data_train[target_name]<severity_cap, severity_cap)
+data_test[target_name] = data_test[target_name].where(data_test[target_name]<severity_cap, severity_cap)
+
 
 #drop alternative targets
-drop_list = [ 'Exposure', 'ClaimAmount', 'BonusMalus', 'severity', 'Claim_xs000k', 'Claim_xs100k','Claim_xs500k', 'Density']
+drop_list = [ 'Exposure', 'ClaimNb', 'BonusMalus', 'ClaimAmount', 'Claim_xs000k', 'Claim_xs100k','Claim_xs500k', 'Density']
 data_train.drop(drop_list,axis='columns', inplace=True)
 data_test.drop(drop_list,axis='columns', inplace=True)
 
@@ -52,7 +50,6 @@ label_encode_factors = ['Area',
                         'VehPower',
                         'VehBrand',
                         'VehGas',
-                        #'Density',
                         'Region',
                         'DrivAgeBand',
                         'DensityBand',
@@ -61,11 +58,16 @@ data_train_encoded, encoders = du.preprocess_labelencode(data_train, label_encod
 data_test_encoded = du.preprocess_labelencode_apply(encoders, data_test, label_encode_factors)
 
 
-#%% oversample the claim ovservations to create a balanced data set
-data_train_resampled = du.oversample_training_set(data_train_encoded, target_name)
-#data_train_resampled = data_train_encoded.copy()
-print(data_train_encoded[target_name].value_counts())
-print(data_train_resampled[target_name].value_counts())
+#%% sample only claims in the distribution
+
+#remove policies with no claims
+data_train_resampled = data_train_encoded.loc[data_train_encoded[target_name]>0]
+data_test_resampled = data_test_encoded.loc[data_test_encoded[target_name]>0]
+
+#plot input
+fig, ax = plt.subplots(1,1)
+data_train_resampled[target_name].plot(kind='kde', ax=ax)
+data_test_resampled[target_name].plot(kind='kde', ax=ax)
 
 
 #%% split factors and target
@@ -73,22 +75,22 @@ print(data_train_resampled[target_name].value_counts())
 #sets used to train (resampled sets)
 x_train = data_train_resampled.drop(target_name, axis='columns')
 y_train = data_train_resampled[target_name]
-y_test = data_test_encoded[target_name]
+y_test = data_test_resampled[target_name]
 
 #sets used to predict
-x_train_to_predict = data_train_encoded.drop(target_name, axis='columns')
-y_train_to_predict = data_train_encoded[target_name]
-x_test = data_test_encoded.drop(target_name, axis='columns')
+x_train_to_predict = data_train_resampled.drop(target_name, axis='columns')
+y_train_to_predict = data_train_resampled[target_name]
+x_test = data_test_resampled.drop(target_name, axis='columns')
 
 
 #%%
 #
-# Run frequency model
+# Run model
 #
 
-clf_rf = RandomForestRegressor(min_samples_leaf=5, 
-                                n_estimators=70,
-                                max_depth=50,
+clf_rf = RandomForestRegressor(min_samples_leaf=2, 
+                                n_estimators=100,
+                                max_depth=100,
                                 max_features='auto',
                                 criterion='mse',    #mse or mae
                                 verbose=True,
@@ -105,7 +107,7 @@ y_test_predicted_rf = clf_rf.predict(x_test.values)
 # Join results back to data
 #
 target_name_predicted = target_name + '_predicted'
-x_train_to_predict[target_name_predicted] = y_train_predicted_rf.up()
+x_train_to_predict[target_name_predicted] = y_train_predicted_rf
 x_train_to_predict[target_name] = y_train_to_predict
 x_test[target_name_predicted] = y_test_predicted_rf
 x_test[target_name] = y_test

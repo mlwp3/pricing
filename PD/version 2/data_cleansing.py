@@ -11,7 +11,7 @@ def load_file():
     
     return data_train, data_test
     
-def clean_data_minimal(data_raw):
+def clean_data(data_raw):
     
     #create dataframe to adjust
     data = data_raw.copy()
@@ -20,7 +20,14 @@ def clean_data_minimal(data_raw):
     # Process Target Vars
     #
 
-    #nothing
+    data = data.loc[data['ClaimNb']<=5]
+    
+    data['Claim_xs000k'] = 0
+    data['Claim_xs000k'] = data['Claim_xs000k'].where(data['ClaimAmount']==0,1)
+    data['Claim_xs100k'] = 0
+    data['Claim_xs100k'] = data['Claim_xs100k'].where(data['ClaimAmount']<100000,1)
+    data['Claim_xs500k'] = 0
+    data['Claim_xs500k'] = data['Claim_xs500k'].where(data['ClaimAmount']<500000,1)
 
     #
     # Apply filters to the data
@@ -75,5 +82,5 @@ if __name__ =='__main__':
     data_train = data_train_raw.copy()
     
     # apply cleaning steps [:limit rows]
-    data_train = clean_data_minimal(data_train_raw)
-    data_test = clean_data_minimal(data_test_raw)
+    data_train = clean_data(data_train_raw)
+    data_test = clean_data(data_test_raw)

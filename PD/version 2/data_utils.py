@@ -5,6 +5,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 def preprocess_onehot(data):
     
@@ -41,7 +42,7 @@ def preprocess_labelencode_apply(encoders, data, factor_list):
 def oversample_training_set(data, target_name):
     data_training = data.copy()
     
-    data_training_1 = pd.DataFrame(data_training.loc[data_training[target_name]==1])
+    data_training_1 = pd.DataFrame(data_training.loc[data_training[target_name]>=1])
     data_training_0 = pd.DataFrame(data_training.loc[data_training[target_name]==0])
 
     difference = len(data_training_1) - len(data_training_0)
@@ -74,3 +75,20 @@ def gini(actual, pred):
 def gini_normalized(actual, pred):
     return gini(actual, pred) / gini(actual, actual)
 
+
+def plot_factors(data, target_name, target_name_predicted):
+    data_to_plot = data.copy()
+    number_factors = len(data_to_plot.columns) -2
+    
+    fig, axs = plt.subplots(number_factors,1, figsize=(10,number_factors*10))
+    
+    for ax_index in range(0,len(axs)):
+        factor = data_to_plot.columns[ax_index]
+        print(factor)
+        if factor in [target_name, target_name_predicted]:
+            #nothing
+            print('target')
+        else:
+            data_to_plot[[target_name, factor]].groupby(factor).agg(np.mean).plot(kind='bar', ax=axs[ax_index])
+            data_to_plot[[target_name_predicted, factor]].groupby(factor).agg(np.mean).plot(kind='line', color='orange',ax=axs[ax_index])
+    return fig
