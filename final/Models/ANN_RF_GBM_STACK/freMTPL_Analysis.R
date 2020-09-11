@@ -66,7 +66,7 @@ rmse <- function(data, targetvar, prediction.obj) {
   rmse <- sqrt(mse)
   rmse <- rmse / 100
   return(rmse)
-}
+} #Use utils
 
 NRMSE <- function(data, targetvar, prediction.obj) {
   obs <- as.numeric(data[[targetvar]])
@@ -74,7 +74,7 @@ NRMSE <- function(data, targetvar, prediction.obj) {
   r <- rmse(data, targetvar, prediction.obj)
   nrmse <- r / (max(obs) - min(obs))
   return(nrmse)
-}
+} #Use utils
 
 agg_rpr <- function(data, targetvar, prediction.obj) {
   tot_obs <- sum(as.numeric(data[[targetvar]]))
@@ -135,8 +135,8 @@ lift_curve <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
     , exp = exposure
   )
   dataset <- dataset %>%
-    #arrange(exp) %>%
-    mutate(buckets = ntile(exp, n)) %>% 
+    arrange(pred_lc) %>%
+    mutate(buckets = ntile(pred_lc, n)) %>% 
     group_by(buckets) %>% 
     summarise(
       Predicted_Risk_Premium = mean(pred_lc, na.rm = TRUE)
@@ -167,7 +167,7 @@ lift_curve <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
     add_lines(y = ~Observed_Risk_Premium, name = "Observed Risk Premium") %>%
     layout(title = "GLM Sample Decile Curve", xaxis = x, yaxis = y)
   return(lift_curve)
-}
+} #Use utils
 
 mean_pseudohuber_loss <- function(data, targetvar, prediction.obj, delta = 1.0) {
   error <- data[[targetvar]] - prediction.obj
@@ -183,10 +183,6 @@ mean_poisson_deviance_loss <- function(data, targetvar, prediction_obj) {
   agg_pd <- 2 * sum(pd)
   mean_pd_loss <- agg_pd / nrow(data)
   return(mean_pd_loss)
-}
-
-extract_levels <- function(data, factor_name) {
-  return(levels(data[[factor_name]]))
 }
 
 one_way_prep <- function(data, predictors, targetvar, prediction_obj) {
@@ -223,22 +219,6 @@ prep_xgb <- function(data, predictors) {
   data <- dummy_cols(data, predictors)
   predictors <- setdiff(colnames(data), predictors)
   return(as.matrix(data[, predictors]))
-}
-
-get_sample_weights <- function(data, weight_column) {
-  tab <- as.data.frame(table(data[[weight_column]]))
-  total <- sum(tab$Freq)
-  tab <- tab %>%
-    mutate(sample_weight = Freq / total) %>%
-    select(-Freq)
-  tab$Var1 <- as.numeric(as.character(tab$Var1))
-  colnames(tab)[1] <- weight_column
-  tab$sample_weight <- 1 - tab$sample_weight
-  data <- inner_join(data, tab, by = weight_column)
-  sample_weights <- data %>%
-    select(sample_weight)
-  sample_weights <- as.numeric(unlist(sample_weights))
-  return(sample_weights)
 }
 
 mean_huber_loss <- function(y_true, y_pred, delta = 1.0) {
@@ -287,7 +267,7 @@ gamma_deviance_loss <- function(y_true, y_pred) {
   return(mean_gamma_deviance)
 }
 
-mean_gamma_deviance_loss(data, targetvar, predictions_obj) {
+mean_gamma_deviance_loss <- function(data, targetvar, prediction_obj) {
   obs <- as.numeric(data[[targetvar]])
   pred <- as.numeric(prediction_obj)
   gd <- 2 * (log((pred / obs)) + (obs / pred) - 1)
@@ -345,7 +325,7 @@ names(tab) <- cat_vars
 tab
 
 matrix(colnames(dat), ncol = 1)
-dat <- dat[, c(seq(1, 12, by = 1), 14, 15)]
+dat <- dat[, c(seq(1, 8, by = 1), seq(10, 16, by = 1))]
 dat <- dat[complete.cases(dat), ]
 
 dat$VehPower <- as.factor(dat$VehPower)
@@ -381,15 +361,17 @@ rm(factors, i, factor_levels_output, factor_levels_check, reorder_factor_levels,
 
 #Split into Train and Test
 train <- dat %>%
-  filter(dtype == "train")
+  filter(dtype == "train") %>%
+  select(-dtype)
 
 test <- dat %>%
-  filter(dtype == "test")
+  filter(dtype == "test") %>%
+  select(-dtype)
 
 ##========BASELINE GLM==========##
 targetvar <- c("ClaimCount")
 exposure <- c("total_offset")
-excl_vars <- c("ClaimAmount", "severity", "dtype", "BonusMalus", "exposure")
+excl_vars <- c("ClaimAmount", "severity", "RecordID", "BonusMalus", "exposure", "dtype")
 predictors <- colnames(dat)[!colnames(dat) %in% c(targetvar, exposure, excl_vars)]
 predictors <- paste(predictors, collapse = "+")
 formula <- as.formula(paste(targetvar,"~",predictors,collapse = "+"))
@@ -406,7 +388,7 @@ predictions_glm_freq <- as.numeric(predict(glm_freq, test, type = "response"))
 
 targetvar <- c("severity")
 weight <- c("ClaimCount")
-excl_vars <- c("ClaimAmount", "exposure", "dtype", "BonusMalus", "total_offset")
+excl_vars <- c("ClaimAmount", "exposure", "dtype", "BonusMalus", "total_offset", "RecordID")
 predictors <- colnames(dat)[!colnames(dat) %in% c(targetvar, weight, excl_vars)]
 predictors <- paste(predictors, collapse = "+")
 formula <- as.formula(paste(targetvar,"~",predictors,collapse = "+"))
@@ -427,21 +409,17 @@ rm(train_sev)
 
 targetvar <- c("ClaimAmount")
 exposure <- c("total_offset")
-excl_vars <- c("ClaimCount", "severity", "dtype", "BonusMalus", "exposure")
+excl_vars <- c("ClaimCount", "severity", "dtype", "BonusMalus", "exposure", "RecordID")
 predictors <- colnames(dat)[!colnames(dat) %in% c(targetvar, exposure, excl_vars)]
 predictors <- paste(predictors, collapse = "+")
 formula <- as.formula(paste(targetvar,"~",predictors,collapse = "+"))
 
-train_tweedie_tune <- train %>%
-  mutate(ClaimAmount = pmin(ClaimAmount, 10000))
-
-p_values <- seq(1.2, 1.75, length = 8)
-p_tuning <- tweedie.profile(formula = as.formula(paste0(targetvar,"~",1)), data = train_tweedie_tune, p.vec = p_values, do.plot = FALSE, 
+p_values <- seq(1.3, 1.6, length = 8)
+p_tuning <- tweedie.profile(formula = as.formula(paste0(targetvar,"~",1)), data = train, p.vec = p_values, do.plot = FALSE, 
                             verbose = 2, do.smooth = TRUE, method = "series", fit.glm = FALSE)
 p <- p_tuning$p.max
 rm(p_values)
 rm(p_tuning)
-rm(train_tweedie_tune)
 
 glm_lc <- glm(formula = formula, data = train, family = tweedie(var.power = p, link.power = 0), offset = log(exposure),
               weight = rep(1, nrow(train)))
@@ -455,7 +433,7 @@ predictions_glm_lc <- as.numeric(predict(glm_lc, test, type = "response"))
 approach_used <- 1 #Pick 0 for Single-Model Approach and 1 for Stack Approach
 
 #Split Training dataset and Process
-set.seed(70)
+set.seed(797)
 ind <- createDataPartition(train$ClaimCount, p = 0.5, list = FALSE, times = 1)
 train_stack <- train[-ind, ]
 val_stack <- train[ind, ]
@@ -464,7 +442,7 @@ mean(train_stack$ClaimCount); mean(val_stack$ClaimCount); var(train_stack$ClaimC
 
 targetvar <- c("ClaimCount")
 exposure <- c("total_offset")
-excl_vars <- c("ClaimAmount", "severity", "dtype", "BonusMalus", "exposure")
+excl_vars <- c("ClaimAmount", "severity", "dtype", "BonusMalus", "exposure", "RecordID")
 predictors <- colnames(dat)[!colnames(dat) %in% c(targetvar, exposure, excl_vars)]
 
 factors <- c()
@@ -548,14 +526,15 @@ input_data <- layer_input(shape = ncol(x_train), dtype = "float32", name = "x_da
 offset <- layer_input(shape = c(1), dtype = "float32", name = "offset")
 
 ##==========FREQUENCY MODELLING==========##
-selected_model <- c("mlp1") #Only Applicable if Modelling Approach is set to 0 - Can be one of mlp1, mlp2, mlp3, mlp4 or gbm
+selected_model <- c("mlp3") #Only Applicable if Modelling Approach is set to 0 - Can be one of mlp1, mlp2, mlp3, mlp4 or gbm
 
 if(approach_used == 1) {
   set.seed(14578)
   network <- input_data %>%
-    layer_dense(units = 50, activation = "tanh", name = "h1") %>%
     layer_dense(units = 20, activation = "tanh", name = "h2") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 10, activation = "tanh", name = "h3") %>%
+    layer_dropout(0.1) %>%
     layer_dense(units = 1, activation = "linear", name = "network",
                 weights = list(array(0, dim = c(10, 1)), 
                                array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
@@ -578,7 +557,9 @@ if(approach_used == 1) {
   set.seed(1234777)
   network <- input_data %>%
     layer_dense(units = 20, activation = "tanh", name = "h1") %>%
+    layer_dropout(0.25) %>%
     layer_dense(units = 15, activation = "tanh", name = "h2") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 4, activation = "tanh", name = "h3") %>%
     layer_dense(units = 1, activation = "linear", name = "network", 
                 weights = list(array(0, dim = c(4, 1)), 
@@ -602,8 +583,11 @@ if(approach_used == 1) {
   set.seed(130)
   network <- input_data %>%
     layer_dense(units = 20, activation = "tanh", name = "h1") %>%
+    layer_dropout(0.25) %>%
     layer_dense(units = 15, activation = "tanh", name = "h2") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 10, activation = "tanh", name = "h3") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 5, activation = "tanh", name = "h4") %>%
     layer_dense(units = 1, activation = "linear", name = "network",
                 weights = list(array(0, dim = c(5, 1)), 
@@ -627,12 +611,15 @@ if(approach_used == 1) {
   set.seed(8755)
   network <- input_data %>%
     layer_dense(units = 40, activation = "tanh", name = "h1") %>%
+    layer_dropout(0.4) %>%
     layer_dense(units = 25, activation = "tanh", name = "h2") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 10, activation = "tanh", name = "h3") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 1, activation = "linear", name = "network",
                 weights = list(array(0, dim = c(10, 1)), 
                                array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
-                                     dim = c(1))))  
+                                     dim = c(1)))) 
   response <- list(network, offset) %>% layer_add(name = "add") %>%
     layer_dense(1, activation = k_exp, name = "response", trainable = FALSE, 
                 weights = list(array(1, dim = c(1, 1)), array(0, dim = c(1))))
@@ -649,10 +636,6 @@ if(approach_used == 1) {
   #predictions_mlp4_l1_unscaled <- as.numeric((predictions_mlp4_l1 * (max_target - min_target)) + min_target)
   
   #Pull in Level 1 Predictions and Append to Validation Set for Level 2 - Set weights for each model based on individual predictive accuracy
-  #rmse_1 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp1_l1_unscaled)
-  #rmse_2 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp2_l1_unscaled)
-  #rmse_3 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp3_l1_unscaled)
-  #rmse_4 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp4_l1_unscaled)
   rmse_1 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp1_l1)
   rmse_2 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp2_l1)
   rmse_3 <- mean_poisson_deviance_loss(val_stack, targetvar, predictions_mlp3_l1)
@@ -671,8 +654,8 @@ if(approach_used == 1) {
   xgb_train <- xgb.DMatrix(x_val, label = as.numeric(l1_predictions), info = list(base_margin = as.numeric(o_val)), weight = rep(1, nrow(x_val)))
   xgb_test <- xgb.DMatrix(x_test, label = as.numeric(y_test), info = list(base_margin = as.numeric(o_test)), weight = rep(1, nrow(x_test)))
   set.seed(874747)
-  xgboost <- xgboost(objective = "count:poisson", data = xgb_train, nrounds = 10000, verbose = 1, max.depth = 15, 
-                          eta = 0.5, early_stopping_rounds = 500)
+  xgboost <- xgboost(objective = "count:poisson", data = xgb_train, nrounds = 100000, verbose = 1, max.depth = 5, 
+                          eta = 0.2, early_stopping_rounds = 500)
   predictions_freq <- predict(xgboost, xgb_test)
   #predictions_freq <- (predictions_freq * (max_target - min_target)) + min_target
 } else {
@@ -680,8 +663,10 @@ if(approach_used == 1) {
     set.seed(14578)
     network <- input_data %>%
       layer_dense(units = 20, activation = "tanh", name = "h2") %>%
+      layer_dropout(0.2) %>%
       layer_dense(units = 10, activation = "tanh", name = "h3") %>%
-      layer_dense(units = 1, activation = "sigmoid", name = "network",
+      layer_dropout(0.1) %>%
+      layer_dense(units = 1, activation = "linear", name = "network",
                   weights = list(array(0, dim = c(10, 1)), 
                                  array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
                                        dim = c(1))))
@@ -704,7 +689,9 @@ if(approach_used == 1) {
       set.seed(1234777)
       network <- input_data %>%
         layer_dense(units = 20, activation = "tanh", name = "h1") %>%
+        layer_dropout(0.25) %>%
         layer_dense(units = 15, activation = "tanh", name = "h2") %>%
+        layer_dropout(0.2) %>%
         layer_dense(units = 4, activation = "tanh", name = "h3") %>%
         layer_dense(units = 1, activation = "linear", name = "network", 
                     weights = list(array(0, dim = c(4, 1)), 
@@ -726,15 +713,18 @@ if(approach_used == 1) {
       #predictions_freq <- as.numeric((predictions_freq * (max_target - min_target)) + min_target)
   } else 
     if(selected_model == "mlp3") {
-    network <- input_data %>%
-      layer_dense(units = 20, activation = "tanh", name = "h1") %>%
-      layer_dense(units = 15, activation = "tanh", name = "h2") %>%
-      layer_dense(units = 10, activation = "tanh", name = "h3") %>%
-      layer_dense(units = 5, activation = "tanh", name = "h4") %>%
-      layer_dense(units = 1, activation = "linear", name = "network",
-                  weights = list(array(0, dim = c(5, 1)), 
-                                 array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
-                                       dim = c(1))))
+      network <- input_data %>%
+        layer_dense(units = 20, activation = "tanh", name = "h1") %>%
+        layer_dropout(0.25) %>%
+        layer_dense(units = 15, activation = "tanh", name = "h2") %>%
+        layer_dropout(0.2) %>%
+        layer_dense(units = 10, activation = "tanh", name = "h3") %>%
+        layer_dropout(0.2) %>%
+        layer_dense(units = 5, activation = "tanh", name = "h4") %>%
+        layer_dense(units = 1, activation = "linear", name = "network",
+                    weights = list(array(0, dim = c(5, 1)), 
+                                   array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
+                                         dim = c(1))))
     response <- list(network, offset) %>% layer_add(name = "add") %>%
       layer_dense(1, activation = k_exp, name = "response", trainable = FALSE, 
                   weights = list(array(1, dim = c(1, 1)), array(0, dim = c(1))))
@@ -752,13 +742,17 @@ if(approach_used == 1) {
   } else 
     if (selected_model == "mlp4") {
     network <- input_data %>%
-      layer_dense(units = 40, activation = "tanh", name = "h1") %>%
-      layer_dense(units = 25, activation = "tanh", name = "h2") %>%
-      layer_dense(units = 10, activation = "tanh", name = "h3") %>%
-      layer_dense(units = 1, activation = "linear", name = "network",
-                  weights = list(array(0, dim = c(10, 1)), 
-                                 array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
-                                       dim = c(1))))  
+      network <- input_data %>%
+        layer_dense(units = 40, activation = "tanh", name = "h1") %>%
+        layer_dropout(0.4) %>%
+        layer_dense(units = 25, activation = "tanh", name = "h2") %>%
+        layer_dropout(0.2) %>%
+        layer_dense(units = 10, activation = "tanh", name = "h3") %>%
+        layer_dropout(0.2) %>%
+        layer_dense(units = 1, activation = "linear", name = "network",
+                    weights = list(array(0, dim = c(10, 1)), 
+                                   array(log(sum(as.numeric(y_train)) / sum(train_nn[[exposure]])), 
+                                         dim = c(1))))   
     response <- list(network, offset) %>% layer_add(name = "add") %>%
       layer_dense(1, activation = k_exp, name = "response", trainable = FALSE, 
                   weights = list(array(1, dim = c(1, 1)), array(0, dim = c(1))))
@@ -778,8 +772,8 @@ if(approach_used == 1) {
         xgb_train <- xgb.DMatrix(x_train, label = as.numeric(y_train), info = list(base_margin = as.numeric(o_train), weight = rep(1, nrow(x_train))))
         xgb_test <- xgb.DMatrix(x_val, label = as.numeric(y_val), info = list(base_margin = as.numeric(o_val), weight = rep(1, nrow(x_val))))
         set.seed(874747)
-        xgboost <- xgboost(objective = "count:poisson", data = xgb_train, nrounds = 10000, verbose = 1, max.depth = 15, 
-                           eta = 0.5, early_stopping_rounds = 500)
+        xgboost <- xgboost(objective = "count:poisson", data = xgb_train, nrounds = 100000, verbose = 1, max.depth = 5, 
+                           eta = 0.2, early_stopping_rounds = 500)
         predictions_freq <- predict(xgboost, xgb_test)
         #predictions_freq <- (predictions_freq * (max_target - min_target)) + min_target
   }
@@ -794,7 +788,7 @@ approach_used <- 0 #Pick 0 for Single-Model Approach and 1 for Stack Approach
 train_sev <- train %>%
   filter(severity > 0)
 #Split Training dataset and Process
-set.seed(985953)
+set.seed(598)
 ind <- createDataPartition(train_sev$severity, p = 0.5, list = FALSE, times = 1)
 train_stack <- train_sev[-ind, ]
 val_stack <- train_sev[ind, ]
@@ -804,7 +798,7 @@ mean(train_stack$severity); mean(val_stack$severity); var(train_stack$severity);
 targetvar <- c("severity")
 exposure <- c("total_offset")
 weight <- c("ClaimCount")
-excl_vars <- c("ClaimAmount", "dtype", "BonusMalus", "exposure")
+excl_vars <- c("ClaimAmount", "dtype", "BonusMalus", "exposure", "RecordID")
 predictors <- colnames(dat)[!colnames(dat) %in% c(targetvar, exposure, excl_vars)]
 
 factors <- c()
@@ -855,9 +849,6 @@ if(approach_used == 1) {
   y_val <- as.matrix(val_nn[targetvar])
   x_test <- as.matrix(test_nn[predictors_nn])
   y_test <- as.matrix(test_nn[targetvar])
-  #w_train <- get_sample_weights(train_stack, weight)
-  #w_val <- get_sample_weights(val_stack, weight)
-  #w_test <- get_sample_weights(test, weight)
   w_train <- as.numeric(train_nn[[weight]])
   w_val <- as.numeric(val_nn[[weight]])
   w_test <- as.numeric(test_nn[[weight]])
@@ -867,8 +858,6 @@ if(approach_used == 1) {
   y_train <- as.matrix(train_nn[targetvar])
   x_val <- as.matrix(test_nn[predictors_nn])
   y_val <- as.matrix(test_nn[targetvar])
-  #w_train <- get_sample_weights(rbind(train_stack, val_stack), weight)
-  #w_val <- get_sample_weights(test, weight)
   w_train <- as.numeric(train_nn[[weight]])
   w_val <- as.numeric(test_nn[[weight]])
 }
@@ -885,11 +874,11 @@ if(approach_used == 1) {
     layer_dense(units = 100, activation = "tanh", name = "h1") %>%
     layer_dense(units = 60, activation = "tanh", name = "h2") %>%
     layer_dense(units = 25, activation = "tanh", name = "h3") %>%
-    layer_dense(units = 1, activation = "sigmoid", name = "network")
+    layer_dense(units = 1, activation = "linear", name = "network")
   mlp1 <- keras_model(inputs = c(input_data), outputs = c(network))
   mlp1 <- multi_gpu_model(mlp1, gpus = 2)
   mlp1 %>%
-    compile(loss = loss_gamma, optimizer = optimizer_adam())
+    compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
   fit <- fit(mlp1, list(x_train), y = y_train, validation_split = 0.1, sample_weight = as.numeric(w_train),
              batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, shuffle = FALSE,
              callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -902,11 +891,11 @@ if(approach_used == 1) {
   network <- input_data %>%
     layer_dense(units = 50, activation = "tanh", name = "h1") %>%
     layer_dense(units = 25, activation = "tanh", name = "h2") %>%
-    layer_dense(units = 1, activation = "sigmoid", name = "network")
+    layer_dense(units = 1, activation = "linear", name = "network")
   mlp2 <- keras_model(inputs = c(input_data), outputs = c(network))
   mlp2 <- multi_gpu_model(mlp2, gpus = 2)
   mlp2 %>%
-    compile(loss = loss_gamma, optimizer = optimizer_adam())
+    compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
   fit <- fit(mlp2, list(x_train), y = y_train, validation_split = 0.1, shuffle = FALSE,
              batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, sample_weight = as.numeric(w_train),
              callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -921,11 +910,11 @@ if(approach_used == 1) {
     layer_dense(units = 150, activation = "tanh", name = "h2") %>%
     layer_dense(units = 100, activation = "tanh", name = "h3") %>%
     layer_dense(units = 40, activation = "tanh", name = "h4") %>%
-    layer_dense(units = 1, activation = "sigmoid", name = "network")
+    layer_dense(units = 1, activation = "linear", name = "network")
   mlp3 <- keras_model(inputs = c(input_data), outputs = c(network))
   mlp3 <- multi_gpu_model(mlp3, gpus = 2)
   mlp3 %>%
-    compile(loss = loss_gamma, optimizer = optimizer_adam())
+    compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
   fit <- fit(mlp3, list(x_train), y = y_train, validation_split = 0.1, shuffle = FALSE,
              batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, sample_weight = as.numeric(w_train),
              callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -939,11 +928,11 @@ if(approach_used == 1) {
     layer_dense(units = 50, activation = "tanh", name = "h1") %>%
     layer_dense(units = 40, activation = "tanh", name = "h2") %>%
     layer_dense(units = 15, activation = "tanh", name = "h3") %>%
-    layer_dense(units = 1, activation = "sigmoid", name = "network")
+    layer_dense(units = 1, activation = "linear", name = "network")
   mlp4 <- keras_model(inputs = c(input_data), outputs = c(network))
   mlp4 <- multi_gpu_model(mlp4, gpus = 2)
   mlp4 %>%
-    compile(loss = loss_gamma, optimizer = optimizer_adam())
+    compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
   fit <- fit(mlp4, list(x_train), y = y_train, validation_split = 0.1, sample_weight = as.numeric(w_train),
              batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, shuffle = FALSE,
              callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -975,7 +964,7 @@ if(approach_used == 1) {
   xgb_train <- xgb.DMatrix(x_val, label = as.numeric(l1_predictions), weight = as.numeric(w_val))
   xgb_test <- xgb.DMatrix(x_test, label = as.numeric(y_test), weight = as.numeric(w_test))
   set.seed(874747)
-  xgboost <- xgboost(objective = "reg:gamma", data = xgb_train, nrounds = 25000, verbose = 1, max.depth = 15, 
+  xgboost <- xgboost(objective = "reg:squaredlogerror", data = xgb_train, nrounds = 25000, verbose = 1, max.depth = 15, 
                          eta = 0.3, early_stopping_rounds = 1500)
   predictions_sev <- predict(xgboost, xgb_test)
   #predictions_sev <- (predictions_sev  * (max_target - min_target)) + min_target
@@ -983,15 +972,13 @@ if(approach_used == 1) {
   if(selected_model == "mlp1") {
     network <- input_data %>%
       layer_dense(units = 100, activation = "tanh", name = "h1") %>%
-      layer_dropout(0.4) %>%
       layer_dense(units = 60, activation = "tanh", name = "h2") %>%
-      layer_dropout(0.25) %>%
       layer_dense(units = 25, activation = "tanh", name = "h3") %>%
-      layer_dense(units = 1, activation = "sigmoid", name = "network")
+      layer_dense(units = 1, activation = "linear", name = "network")
     mlp <- keras_model(inputs = c(input_data), outputs = c(network))
     mlp <- multi_gpu_model(mlp, gpus = 2)
     mlp %>%
-      compile(loss = loss_gamma, optimizer = optimizer_adam())
+      compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
     fit <- fit(mlp, list(x_train), y = y_train, validation_split = 0.1, sample_weight = as.numeric(w_train),
                batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, shuffle = FALSE,
                callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -1005,11 +992,11 @@ if(approach_used == 1) {
       network <- input_data %>%
         layer_dense(units = 50, activation = "tanh", name = "h1") %>%
         layer_dense(units = 25, activation = "tanh", name = "h2") %>%
-        layer_dense(units = 1, activation = "sigmoid", name = "network")
+        layer_dense(units = 1, activation = "linear", name = "network")
       mlp <- keras_model(inputs = c(input_data), outputs = c(network))
       mlp <- multi_gpu_model(mlp, gpus = 2)
       mlp %>%
-        compile(loss = loss_gamma, optimizer = optimizer_adam())
+        compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
       fit <- fit(mlp, list(x_train), y = y_train, validation_split = 0.1, shuffle = FALSE,
                  batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, sample_weight = as.numeric(w_train),
                  callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -1025,11 +1012,11 @@ if(approach_used == 1) {
           layer_dense(units = 150, activation = "tanh", name = "h2") %>%
           layer_dense(units = 100, activation = "tanh", name = "h3") %>%
           layer_dense(units = 40, activation = "tanh", name = "h4") %>%
-          layer_dense(units = 1, activation = "sigmoid", name = "network")
+          layer_dense(units = 1, activation = "linear", name = "network")
         mlp <- keras_model(inputs = c(input_data), outputs = c(network))
         mlp <- multi_gpu_model(mlp3, gpus = 2)
         mlp %>%
-          compile(loss = loss_gamma, optimizer = optimizer_adam())
+          compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
         fit <- fit(mlp, list(x_train), y = y_train, validation_split = 0.1, shuffle = FALSE,
                    batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, sample_weight = as.numeric(w_train),
                    callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -1043,11 +1030,11 @@ if(approach_used == 1) {
       layer_dense(units = 50, activation = "tanh", name = "h1") %>%
       layer_dense(units = 40, activation = "tanh", name = "h2") %>%
       layer_dense(units = 15, activation = "tanh", name = "h3") %>%
-      layer_dense(units = 1, activation = "sigmoid", name = "network")
+      layer_dense(units = 1, activation = "linear", name = "network")
     mlp <- keras_model(inputs = c(input_data), outputs = c(network))
     mlp <- multi_gpu_model(mlp4, gpus = 2)
     mlp %>%
-      compile(loss = loss_gamma, optimizer = optimizer_adam())
+      compile(loss = "mean_squared_logarithmic_error", optimizer = optimizer_adam())
     fit <- fit(mlp, list(x_train), y = y_train, validation_split = 0.1, sample_weight = as.numeric(w_train),
                batch_size = 0.05 * nrow(x_train), epochs = 10000, verbose = 1, shuffle = FALSE,
                callbacks = list(callback_early_stopping(monitor = "val_loss", min_delta = 1e-08, 
@@ -1060,8 +1047,8 @@ if(approach_used == 1) {
             xgb_train <- xgb.DMatrix(x_train, label = as.numeric(y_train), weight = as.numeric(w_train))
             xgb_test <- xgb.DMatrix(x_val, label = as.numeric(y_val), weight = as.numeric(w_val))
             set.seed(874747)
-            xgboost <- xgboost(objective = "reg:gamma", data = xgb_train, nrounds = 25000, verbose = 1, max.depth = 15, 
-                               eta = 0.3, early_stopping_rounds = 1500)
+            xgboost <- xgboost(objective = "reg:gamma", data = xgb_train, nrounds = 100000, verbose = 1, max.depth = 5, 
+                               eta = 0.1, early_stopping_rounds = 1000)
             predictions_sev <- predict(xgboost, xgb_test)
             #predictions_sev <- (predictions_sev  * (max_target - min_target)) + min_target
           }
@@ -1074,7 +1061,7 @@ if(approach_used == 1) {
 approach_used <- 1 #Pick 0 for Single-Model Approach and 1 for Stack Approach
 
 #Split Training dataset and Process
-set.seed(8592)
+set.seed(8718)
 ind <- createDataPartition(train$ClaimAmount, p = 0.5, list = FALSE, times = 1)
 train_stack <- train[-ind, ]
 val_stack <- train[ind, ]
@@ -1084,7 +1071,7 @@ mean(train_stack$ClaimAmount); mean(val_stack$ClaimAmount); var(train_stack$Clai
 targetvar <- c("ClaimAmount")
 exposure <- c("total_offset")
 weight <- c("ClaimCount")
-excl_vars <- c("severity", "dtype", "BonusMalus", "exposure")
+excl_vars <- c("severity", "dtype", "BonusMalus", "exposure", "RecordID")
 predictors <- colnames(dat)[!colnames(dat) %in% c(targetvar, exposure, weight, excl_vars)]
 
 factors <- c()
@@ -1173,8 +1160,9 @@ selected_model <- c("mlp1") #Only Applicable if Modelling Approach is set to 0 -
 if(approach_used == 1) {
   network <- input_data %>%
     layer_dense(units = 50, activation = "tanh", name = "h1") %>%
-    layer_dropout(0.4) %>%
+    layer_dropout(0.25) %>%
     layer_dense(units = 25, activation = "tanh", name = "h2") %>%
+    layer_dropout(0.1) %>%
     layer_dense(units = 1, activation = "linear", name = "network",
                 weights = list(array(0, dim = c(25, 1)), 
                                array(log(sum(as.numeric(y_train) * (train_nn[[exposure]] ^ (1 - p))) / sum(train_nn[[exposure]] ^ (2 - p))), 
@@ -1201,6 +1189,7 @@ if(approach_used == 1) {
     layer_dense(units = 150, activation = "tanh", name = "h2") %>%
     layer_dropout(0.25) %>%
     layer_dense(units = 40, activation = "tanh", name = "h3") %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 1, activation = "linear", name = "network",
                 weights = list(array(0, dim = c(40, 1)), 
                                array(log(sum(as.numeric(y_train) * (train_nn[[exposure]] ^ (1 - p))) / sum(train_nn[[exposure]] ^ (2 - p))), 
@@ -1222,12 +1211,10 @@ if(approach_used == 1) {
 
   set.seed(130)
   network <- input_data %>%
-    layer_dense(units = 150, activation = "tanh", name = "h1") %>%
-    layer_dropout(0.4) %>%
     layer_dense(units = 100, activation = "tanh", name = "h2") %>%
-    layer_dropout(0.2) %>%
+    layer_dropout(0.25) %>%
     layer_dense(units = 60, activation = "tanh", name = "h3") %>%
-    layer_dropout(0.1) %>%
+    layer_dropout(0.2) %>%
     layer_dense(units = 1, activation = "linear", name = "network",
                 weights = list(array(0, dim = c(60, 1)), 
                                array(log(sum(as.numeric(y_train) * (train_nn[[exposure]] ^ (1 - p))) / sum(train_nn[[exposure]] ^ (2 - p))), 
@@ -1249,8 +1236,6 @@ if(approach_used == 1) {
 
   set.seed(8755)
   network <- input_data %>%
-    layer_dense(units = 250, activation = "tanh", name = "h1") %>%
-    layer_dropout(0.5) %>%
     layer_dense(units = 50, activation = "tanh", name = "h2") %>%
     layer_dropout(0.2) %>%
     layer_dense(units = 1, activation = "linear", name = "network",
@@ -1295,8 +1280,8 @@ if(approach_used == 1) {
   xgb_train <- xgb.DMatrix(x_val, label = as.numeric(l1_predictions), info = list(base_margin = as.numeric(o_val)))
   xgb_test <- xgb.DMatrix(x_test, label = as.numeric(y_test), info = list(base_margin = as.numeric(o_test)))
   set.seed(874747)
-  xgboost <- xgboost(objective = "reg:tweedie", data = xgb_train, nrounds = 10000, verbose = 1, max.depth = 25, 
-                        eta = 0.5, early_stopping_rounds = 500, tweedie_variance_power = p)
+  xgboost <- xgboost(objective = "reg:tweedie", data = xgb_train, nrounds = 100000, verbose = 1, max.depth = 5, 
+                        eta = 0.2, early_stopping_rounds = 500, tweedie_variance_power = p)
   predictions_lc <- predict(xgboost, xgb_test)
   #predictions_lc <- (predictions_lc * (max_target - min_target)) + min_target
 } else {
@@ -1306,6 +1291,7 @@ if(approach_used == 1) {
       layer_dense(units = 50, activation = "tanh", name = "h1") %>%
       layer_dropout(0.4) %>%
       layer_dense(units = 25, activation = "tanh", name = "h2") %>%
+      layer_dropout(0.2) %>%
       layer_dense(units = 1, activation = "linear", name = "network",
                   weights = list(array(0, dim = c(25, 1)), 
                                  array(log(sum(as.numeric(y_train) * (train_nn[[exposure]] ^ (1 - p))) / sum(train_nn[[exposure]] ^ (2 - p))), 
@@ -1333,6 +1319,7 @@ if(approach_used == 1) {
         layer_dense(units = 150, activation = "tanh", name = "h2") %>%
         layer_dropout(0.25) %>%
         layer_dense(units = 40, activation = "tanh", name = "h3") %>%
+        layer_dropout(0.2) %>%
         layer_dense(units = 1, activation = "linear", name = "network",
                     weights = list(array(0, dim = c(40, 1)), 
                                    array(log(sum(as.numeric(y_train) * (train_nn[[exposure]] ^ (1 - p))) / sum(train_nn[[exposure]] ^ (2 - p))), 
@@ -1355,12 +1342,10 @@ if(approach_used == 1) {
       if(selected_model == "mlp3") {
         set.seed(130)
         network <- input_data %>%
-          layer_dense(units = 150, activation = "tanh", name = "h1") %>%
-          layer_dropour(0.4) %>%
           layer_dense(units = 100, activation = "tanh", name = "h2") %>%
-          layer_dropout(0.2) %>%
+          layer_dropout(0.25) %>%
           layer_dense(units = 60, activation = "tanh", name = "h3") %>%
-          layer_dropout(0.1) %>%
+          layer_dropout(0.2) %>%
           layer_dense(units = 1, activation = "linear", name = "network",
                       weights = list(array(0, dim = c(60, 1)), 
                                      array(log(sum(as.numeric(y_train) * (train_nn[[exposure]] ^ (1 - p))) / sum(train_nn[[exposure]] ^ (2 - p))), 
@@ -1382,8 +1367,6 @@ if(approach_used == 1) {
       } else 
         if (selected_model == "mlp4") {
     network <- input_data %>%
-      layer_dense(units = 250, activation = "tanh", name = "h1") %>%
-      layer_dropout(0.5) %>%
       layer_dense(units = 50, activation = "tanh", name = "h2") %>%
       layer_dropout(0.2) %>%
       layer_dense(units = 1, activation = "linear", name = "network",
@@ -1409,8 +1392,8 @@ if(approach_used == 1) {
             xgb_train <- xgb.DMatrix(x_train, label = as.numeric(y_train), info = list(base_margin = as.numeric(o_train)))
             xgb_test <- xgb.DMatrix(x_val, label = as.numeric(y_val), info = list(base_margin = as.numeric(o_val)))
             set.seed(874747)
-            xgboost <- xgboost(objective = "reg:tweedie", data = xgb_train, nrounds = 10000, verbose = 1, max.depth = 25, 
-                               eta = 0.5, early_stopping_rounds = 500, tweedie_variance_power = p)
+            xgboost <- xgboost(objective = "reg:tweedie", data = xgb_train, nrounds = 100000, verbose = 1, max.depth = 5, 
+                               eta = 0.2, early_stopping_rounds = 500, tweedie_variance_power = p)
             predictions_lc <- predict(xgboost, xgb_test)
             #predictions_lc <- (predictions_lc * (max_target - min_target)) + min_target
           }
@@ -1492,7 +1475,7 @@ norm_rpd_compiled <- c(norm_rpd_glm, norm_rpd_ML, norm_rpd_glm_lc, norm_rpd_ML_l
 model_metrics <- data.frame(models, rmse_compiled, mae_compiled, pearson_cor_compiled, spearman_cor_compiled, gini_index_compiled, agg_rpr_compiled)
 colnames(model_metrics) <- c("Model", "RMSE", "MAE", "Pearson (Linear) Correlation", "Spearman Rank Correlation", "Gini Index", "Aggregate Risk Premium Differential")
 
-eval_metrics <- data.frame(gini_index_compiled, nrmse_compiled, spearman_cor_compiled)
+eval_metrics <- data.frame(gini_index_compiled, nrmse_compiled, nmae_compiled, spearman_cor_compiled, norm_rpd_compiled)
 lscore <- apply(eval_metrics, 1, mean)
 gscore <- apply(eval_metrics, 1, geometric_mean)
 hscore <- apply(eval_metrics, 1, harmonic_mean)
@@ -1519,13 +1502,13 @@ gini_index_plot_GLM + ggtitle("GLM Gini Index Plot")
 #Trim out Dead Wood first
 rm(dat, dat_nn, fit, glm_freq, glm_lc, glm_sev, input_data, network, o_test, o_train, o_val, offset,
    response, test_nn, train, train_nn, train_sev, train_stack, train_stack_bal, val_nn, val_stack, x_test, x_train,
-   x_val, y_test, y_train, y_val, cor_glm_lc_pearson, cor_glm_lc_spearman, eval_metrics,
-   cor_glm_pearson, cor_glm_spearman, cor_ML_lc_pearson, cor_ML_lc_spearman, cor_ML_pearson,
+   x_val, y_test, y_train, y_val, cor_glm_lc_pearson, cor_glm_lc_spearman, eval_metrics, norm_rpd_compiled,
+   cor_glm_pearson, cor_glm_spearman, cor_ML_lc_pearson, cor_ML_lc_spearman, cor_ML_pearson, norm_rpd_glm,
    cor_ML_spearman, gini_glm, gini_glm_lc, gini_index_compiled, gini_ML, gini_ML_lc, nmae_glm, nmae_ML, nmae_ML_lc,
-   l1_rmse, mae_compiled, mae_glm, mae_glm_lc, mae_ML, mae_ML_lc, max_target, min_target, mlp1,
-   models, p, pearson_cor_compiled, predictions_glm_freq, predictions_glm_lc, predictions_glm_sev, 
+   l1_rmse, mae_compiled, mae_glm, mae_glm_lc, mae_ML, mae_ML_lc, max_target, min_target, mlp1, norm_rpd_glm_lc,
+   models, p, pearson_cor_compiled, predictions_glm_freq, predictions_glm_lc, predictions_glm_sev, norm_rpd_ML,
    predictors_nn, rmse_compiled, rmse_glm, rmse_glm_lc, rmse_ML, rmse_ML_lc, soft_sum, spearman_cor_compiled, targetvar,
-   w_test, w_train, w_val, weights, xgb_test, xgb_train, extract_levels, gscore, hscore, lscore,
+   w_test, w_train, w_val, weights, xgb_test, xgb_train, extract_levels, gscore, hscore, lscore, norm_rpd_ML_lc,
    loss_tweedie, tweedie_deviance_loss, exposure, predictions_l2_lc, agg_rpr_glm_lc, nmae_compiled, nmae_glm_lc,
    predictions_l2_sev, weight, gini_index_plot_GLM, agg_rpr_glm, agg_rpr_ML, agg_rpr_compiled, agg_rpr_ML_lc,
    predictions_mlp1_l1, ay, gini_index_plot_stack, grouped_data, one_way_analysis_plot, l1_predictions, model_metrics, 
@@ -1538,7 +1521,7 @@ rm(dat, dat_nn, fit, glm_freq, glm_lc, glm_sev, input_data, network, o_test, o_t
 targetvar <- c("ML_LC")
 exposure <- c("total_offset")
 excl_vars <- c("ML_FREQ", "ML_SEV", "ML", "GLM_FREQ", "GLM_SEV", "GLM_LC", "GLM", "ClaimAmount", "ClaimCount",
-               "severity", "year", "exposure", "BonusMalus", "dtype")
+               "severity", "year", "exposure", "BonusMalus", "dtype", "RecordID")
 predictors <- colnames(test)[!colnames(test) %in% c(targetvar, exposure, excl_vars)]
 
 xgbtrain <- xgb.DMatrix(prep_xgb(test, predictors), label = as.numeric(test[[targetvar]]), 
@@ -1546,7 +1529,7 @@ xgbtrain <- xgb.DMatrix(prep_xgb(test, predictors), label = as.numeric(test[[tar
 
 #RF Surrogate Model
 set.seed(5999)
-rf_surrogate <- xgboost(objective = "reg:gamma", data = xgbtrain, nrounds = 200, verbose = 1, max.depth = 6, 
+rf_surrogate <- xgboost(objective = "reg:gamma", data = xgbtrain, nrounds = 250, verbose = 1, max.depth = 5, 
                         eta = 0.3, early_stopping_rounds = 50)
 test$RF_SURROGATE <- predict(rf_surrogate, xgb.DMatrix(prep_xgb(test, predictors),
                                                              info = list(base_margin = log(test$exposure))))
@@ -1607,7 +1590,7 @@ write_csv(imp_combined, "feature_importance.csv")
 top_vars <- imp_combined %>%
   arrange(desc(as.numeric(scaled_composite_variable_importance_score))) %>%
   select(Variable) %>%
-  head(min(nrow(imp_combined), 5))
+  head(min(nrow(imp_combined), 6))
 top_vars <- as.character(unlist(top_vars))
 
 rm(explainer_rf_surrogate, imp_shap, imp, ptm, max, min, imp_combined, flash)
@@ -1618,13 +1601,12 @@ test$Record_ID <- 1:nrow(test)
 top_50_best_cases <- test %>%
   arrange(desc(get(targetvar))) %>%
   head(50)
+top_50_best_cases$Record_ID <- 1:nrow(top_50_best_cases)
 
 top_50_worst_cases <- test %>%
   arrange(get(targetvar)) %>%
   head(50)
-
-top_50_best_id <- top_50_best_cases$Record_ID
-top_50_worst_id <- top_50_worst_cases$Record_ID
+top_50_worst_cases$Record_ID <- 1:nrow(top_50_worst_cases)
 
 top_50_best_cases <- top_50_best_cases[, which(colnames(top_50_best_cases) %in% predictors)]
 top_50_worst_cases <- top_50_worst_cases[, which(colnames(top_50_worst_cases) %in% predictors)]
@@ -1638,14 +1620,12 @@ for (i in 1:n) {
   shap <- Shapley$new(predictor, x.interest = top_50_best_cases[i, ])$results
   feature_values <- strsplit(shap$feature.value, "=", fixed = TRUE)
   shap$feature_value <- unlist(feature_values)[c(FALSE, TRUE)]
-  shap$Record_ID <- top_50_best_id[i]
+  shap$Record_ID <- i
   shap <- shap[, c("Record_ID", "feature", "feature_value", "phi")]
   lime_output_best_cases[[i]] <- shap
   print(i)
 }
 lime_output_best_cases <- do.call(rbind, lime_output_best_cases)
-lime_output_best_cases <- inner_join(lime_output_best_cases, test[, c("Record_ID", targetvar)], by = "Record_ID")
-lime_output_best_cases$Record_ID <- rev(ntile(lime_output_best_cases[[targetvar]], length(unique(lime_output_best_cases[[targetvar]]))))
 
 n <- nrow(top_50_worst_cases)
 lime_output_worst_cases <- list()
@@ -1653,14 +1633,12 @@ for (i in 1:n) {
   shap <- Shapley$new(predictor, x.interest = top_50_worst_cases[i, ])$results
   feature_values <- strsplit(shap$feature.value, "=", fixed = TRUE)
   shap$feature_value <- unlist(feature_values)[c(FALSE, TRUE)]
-  shap$Record_ID <- top_50_worst_id[i]
+  shap$Record_ID <- i
   shap <- shap[, c("Record_ID", "feature", "feature_value", "phi")]
   lime_output_worst_cases[[i]] <- shap
   print(i)
 }
 lime_output_worst_cases <- do.call(rbind, lime_output_worst_cases)
-lime_output_worst_cases <- inner_join(lime_output_worst_cases, test[, c("Record_ID", targetvar)], by = "Record_ID")
-lime_output_worst_cases$Record_ID <- ntile(lime_output_worst_cases[[targetvar]], length(unique(lime_output_worst_cases[[targetvar]])))
 
 write_csv(lime_output_best_cases, "local_interpretation_best_cases.csv")
 write_csv(lime_output_worst_cases, "local_interpretation_worst_cases.csv")
@@ -1723,8 +1701,8 @@ test_strat <- test_strat %>%
   select(-bucket)
 
 nfolds <- round(nrow(test_strat) / 500)
-nreps <- 1
-#rm(strat_cols, test)
+nreps <- 2
+rm(strat_cols)
 
 int_effects_nfolds <- list()
 for(m in 1:nreps) {
