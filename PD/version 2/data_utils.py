@@ -76,9 +76,11 @@ def gini_normalized(actual, pred):
     return gini(actual, pred) / gini(actual, actual)
 
 
-def plot_factors(data, target_name, target_name_predicted):
-    data_to_plot = data.copy()
-    number_factors = len(data_to_plot.columns) -2
+def plot_factors(data_test, target_name, target_name_predicted, data_train=None):
+    if data_train is not None:
+        data_train_ref = data_train.copy()
+    data_to_plot = data_test.copy()
+    number_factors = len(data_to_plot.columns)
     
     fig, axs = plt.subplots(number_factors,1, figsize=(10,number_factors*10))
     
@@ -87,8 +89,13 @@ def plot_factors(data, target_name, target_name_predicted):
         print(factor)
         if factor in [target_name, target_name_predicted]:
             #nothing
-            print('target')
+            print('--target')
         else:
-            data_to_plot[[target_name, factor]].groupby(factor).agg(np.mean).plot(kind='bar', ax=axs[ax_index])
-            data_to_plot[[target_name_predicted, factor]].groupby(factor).agg(np.mean).plot(kind='line', color='orange',ax=axs[ax_index])
+            data_to_plot[[target_name_predicted, factor]].groupby(factor).agg(np.mean).plot(kind='bar', ax=axs[ax_index])
+            data_to_plot[[target_name, factor]].groupby(factor).agg(np.mean).plot(kind='line', color='orange',ax=axs[ax_index])
+            axs[ax_index].legend(['Actual', 'Predicted'])
+            if data_train is not None:
+                data_train_ref[[target_name_predicted, factor]].groupby(factor).agg(np.mean).plot(kind='line', color='green',ax=axs[ax_index])
+                #o, g, b
+                axs[ax_index].legend(['Test_Actual', 'Train_Actual', 'Predicted'])
     return fig

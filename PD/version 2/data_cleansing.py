@@ -20,53 +20,16 @@ def clean_data(data_raw):
     # Process Target Vars
     #
 
-    data = data.loc[data['ClaimNb']<=5]
-    
-    data['Claim_xs000k'] = 0
-    data['Claim_xs000k'] = data['Claim_xs000k'].where(data['ClaimAmount']==0,1)
-    data['Claim_xs100k'] = 0
-    data['Claim_xs100k'] = data['Claim_xs100k'].where(data['ClaimAmount']<100000,1)
-    data['Claim_xs500k'] = 0
-    data['Claim_xs500k'] = data['Claim_xs500k'].where(data['ClaimAmount']<500000,1)
+#    data = data.loc[data['ClaimNb']<=5]
+#    
+#    data['Claim_xs000k'] = 0
+#    data['Claim_xs000k'] = data['Claim_xs000k'].where(data['ClaimAmount']==0,1)
+#    data['Claim_xs100k'] = 0
+#    data['Claim_xs100k'] = data['Claim_xs100k'].where(data['ClaimAmount']<100000,1)
+#    data['Claim_xs500k'] = 0
+#    data['Claim_xs500k'] = data['Claim_xs500k'].where(data['ClaimAmount']<500000,1)
 
-    #
-    # Apply filters to the data
-    #
 
-    # Exposure
-    #nothing
-
-    
-    #
-    # Process Factors
-    #
-    
-    # Area
-    #nothing
-    
-    # VehPower
-    #nothing
-
-    # BonusMalus
-    #nothing
-    
-    # VehBrand
-    #nothing
-
-    # VehGas
-    #nothing
-
-    # Region
-    #nothing
-
-    # DrivAgeBand
-    #nothing
-    
-    # DensityBand
-    #nothing
-
-    # VehAgeBand
-    #nothing
 
     
     return data
