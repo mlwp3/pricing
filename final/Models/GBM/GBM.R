@@ -11,8 +11,7 @@ source("./Utils/utils.R")
 train <- import_data("./Data/train_new_final.csv") %>% group_data()
 
 test <- import_data("./Data/test_new_final.csv") %>% 
-        mutate(Severity = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb),
-               Loss_Cost = ClaimAmount / Exposure)
+        mutate(Severity = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb))
 
 df <- train %>% mutate(id = row_number())
 
@@ -26,7 +25,7 @@ xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
 
 xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
 
-xgb_model_lc <- xgb.load("./Models/GBM/xgb_loss_cost")
+xgb_model_losses <- xgb.load("./Models/GBM/xgb_loss_cost")
 
 # Create datasets for xgboost ---------------------------------------------
 
@@ -38,8 +37,8 @@ train_sev <- xgb.DMatrix(data = create_data_sev(filter(train, Severity > 0)),
                          label = filter(train, Severity > 0) %>% pull(Severity),
                          weight = filter(train, Severity > 0) %>% pull(ClaimNb))
 
-train_lc <- xgb.DMatrix(data = create_data_numb(train), 
-                        label = train %>% pull(Loss_Cost), 
+train_losses <- xgb.DMatrix(data = create_data_losses(train), 
+                        label = train %>% pull(ClaimAmount), 
                         base_margin = train %>% pull(Exposure) %>% log())
 
 validation_numb <- xgb.DMatrix(data = create_data_numb(validation), 
@@ -49,7 +48,7 @@ validation_numb <- xgb.DMatrix(data = create_data_numb(validation),
 validation_sev <- xgb.DMatrix(data = create_data_sev(filter(validation, Severity > 0)), 
                               label = filter(validation, Severity > 0) %>% pull(Severity))
 
-validation_lc <- xgb.DMatrix(data = create_data_lc(validation), 
+validation_losses <- xgb.DMatrix(data = create_data_losses(validation), 
                              label = validation %>% pull(Loss_Cost), 
                              base_margin = validation %>% pull(Exposure) %>% log())
 
@@ -60,8 +59,8 @@ test_numb <- xgb.DMatrix(data = create_data_numb(test),
 test_sev <- xgb.DMatrix(data = create_data_sev(test), 
                         label = test %>% pull(Severity))
 
-test_lc <- xgb.DMatrix(data = create_data_lc(test), 
-                       label = test %>% pull(Loss_Cost), 
+test_losses <- xgb.DMatrix(data = create_data_losses(test), 
+                       label = test %>% pull(ClaimAmount), 
                        base_margin = test %>% pull(Exposure) %>% log())
 
 # Model Section -----------------------------------------------------------
@@ -146,14 +145,14 @@ sev_pred <- predict(xgb_model_sev, test_sev)
 # DON'T RUN
 # 
 # params <- list(booster = "gbtree",
-#                tree_method = "gpu_hist",
+#                tree_method = "hist",
 #                eval_metric = "tweedie-nloglik@1.6",
 #                objective = "reg:tweedie",
 #                eta = .1,
 #                base_score = 1)
 # 
-# xgbcv_lc <- xgb.cv(params = params,
-#                    data = train_lc,
+# xgbcv_losses <- xgb.cv(params = params,
+#                    data = train_losses,
 #                    nrounds = 10000,
 #                    nfold = 5,
 #                    print_every_n = 100,
@@ -162,55 +161,53 @@ sev_pred <- predict(xgb_model_sev, test_sev)
 #                    maximize = FALSE,
 #                    prediction = TRUE)
 # 
-# xgb_model_lc <- xgb.train(data = train_lc,
+# xgb_model_losses <- xgb.train(data = train_losses,
 #                           params = params,
-#                           watchlist = list(train = train_lc, test = validation_lc),
-#                           nrounds = which.min(xgbcv_lc$evaluation_log$`test_tweedie_nloglik@1.6_mean`),
+#                           watchlist = list(train = train_losses, test = validation_losses),
+#                           nrounds = which.min(xgbcv_losses$evaluation_log$`test_tweedie_nloglik@1.6_mean`),
 #                           verbose = 1,
 #                           print_every_n = 100)
 # 
-# xgb.save(xgb_model_lc, "./Models/GBM/xgb_loss_cost")
+# xgb.save(xgb_model_losses, "./Models/GBM/xgb_loss_cost")
 
-importance_matrix_lc <- xgb.importance(colnames(train_lc), model = xgb_model_lc)
+importance_matrix_losses <- xgb.importance(colnames(train_losses), model = xgb_model_losses)
 
-xgb.ggplot.importance(importance_matrix_lc, rel_to_first = TRUE, top_n = 10, n_clusters = 3) +
-  ggtitle("Feature Importance Loss Cost") + ggsave("./Output/GBM/feat_imp_lc.png")
+xgb.ggplot.importance(importance_matrix_losses, rel_to_first = TRUE, top_n = 10, n_clusters = 3) +
+  ggtitle("Feature Importance Loss Cost") + ggsave("./Output/GBM/feat_imp_losses.png")
 
-lc_pred <- predict(xgb_model_lc, test_lc)
-
-# Predictions
-
-test <- test %>% mutate(observed_lc = ClaimAmount / Exposure,
-                        predicted_numb = numb_pred,
-                        predicted_sev = sev_pred,
-                        predicted_lc = numb_pred * sev_pred / Exposure,
-                        predicted_lc_tw = lc_pred)
+losses_pred <- predict(xgb_model_losses, test_losses)
 
 # Performance Evaluation --------------------------------------------------
 
-eval_dataset <- test %>% select(Exposure, observed_lc, predicted_lc, predicted_lc_tw)
+test <- test %>% mutate(observed_loss_cost = ClaimAmount / Exposure,
+                        predicted_numb = numb_pred,
+                        predicted_sev = sev_pred,
+                        predicted_loss_cost_freq_sev = numb_pred * sev_pred / Exposure,
+                        predicted_loss_cost_tw = losses_pred / Exposure)
 
-eval_dataset %$% NRMSE(predicted_lc, observed_lc)
+eval_dataset <- test %>% select(Exposure, observed_loss_cost, predicted_loss_cost_freq_sev, predicted_loss_cost_tw)
 
-eval_dataset %$% NRMSE(predicted_lc_tw, observed_lc)
+eval_dataset %$% NRMSE(predicted_loss_cost_freq_sev, observed_loss_cost)
 
-eval_dataset %$% gini_plot(predicted_lc, Exposure) + ggtitle("Gini index Freq / Sev") + ggsave("./Output/GBM/gini_freq_sev.png")
+eval_dataset %$% NRMSE(predicted_loss_cost_tw, observed_loss_cost)
 
-eval_dataset %$% gini_plot(predicted_lc_tw, Exposure) + ggtitle("Gini index Loss Cost") + ggsave("./Output/GBM/gini_lc.png")
+eval_dataset %$% gini_plot(predicted_loss_cost_freq_sev, Exposure) + ggtitle("Gini index Freq / Sev") + ggsave("./Output/GBM/gini_freq_sev.png")
 
-eval_dataset %$% gini_value(predicted_lc, Exposure)
+eval_dataset %$% gini_plot(predicted_loss_cost_tw, Exposure) + ggtitle("Gini index Loss Cost") + ggsave("./Output/GBM/gini_loss_cost.png")
 
-eval_dataset %$% gini_value(predicted_lc_tw, Exposure)
+eval_dataset %$% gini_value(predicted_loss_cost_freq_sev, Exposure)
 
-eval_dataset %$% lift_curve_table(predicted_lc, observed_lc, Exposure, 20) %>% 
+eval_dataset %$% gini_value(predicted_loss_cost_tw, Exposure)
+
+eval_dataset %$% lift_curve_table(predicted_loss_cost_freq_sev, observed_loss_cost, Exposure, 20) %>% 
                  lift_curve_plot() +
                  ggtitle("Lift Curve Freq / Sev") + ggsave("./Output/GBM/lift_curve_freq_sev.png")
 
-eval_dataset %$% lift_curve_table(predicted_lc_tw, observed_lc, Exposure, 20) %>% 
+eval_dataset %$% lift_curve_table(predicted_loss_cost_tw, observed_loss_cost, Exposure, 20) %>% 
                  lift_curve_plot() +
-                 ggtitle("Lift Curve Loss Cost") + ggsave("./Output/GBM/lift_curve_lc.png")
+                 ggtitle("Lift Curve Loss Cost") + ggsave("./Output/GBM/lift_curve_loss_cost.png")
 
-eval_dataset %$% double_lift_chart(predicted_lc, predicted_lc_tw, observed_lc, Exposure, 20, "Freq / Sev", "Loss Cost") + 
+eval_dataset %$% double_lift_chart(predicted_loss_cost_freq_sev, predicted_loss_cost_tw, observed_loss_cost, Exposure, 20, "Freq / Sev", "Loss Cost") + 
                  ggtitle("Double Lift Curve") + ggsave("./Output/GBM/double_lift_curve.png")
 
 # Export Final ------------------------------------------------------------
@@ -218,10 +215,21 @@ eval_dataset %$% double_lift_chart(predicted_lc, predicted_lc_tw, observed_lc, E
 test %>% select(RecordID,
                 Exposure,
                 ClaimNb,
-                Loss_Cost,
+                ClaimAmount,
                 Severity,
                 predicted_numb,
                 predicted_sev,
-                predicted_lc_freq_sev = predicted_lc,
-                predicted_lc = predicted_lc_tw) %>% 
-  write_csv("./Output/GBM/dataset_predictions.csv")
+                predicted_loss_cost_freq_sev,
+                predicted_loss_cost_tw) %>% 
+                mutate(Loss_Cost = ClaimAmount / Exposure) %>% 
+                select(RecordID,
+                       Exposure,
+                       ClaimNb,
+                       Severity,
+                       Loss_Cost,
+                       predicted_numb,
+                       predicted_sev,
+                       predicted_loss_cost_freq_sev,
+                       predicted_loss_cost_tw) %>%
+                write_csv("./Output/GBM/dataset_predictions.csv")
+

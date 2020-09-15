@@ -19,17 +19,17 @@ import_data <- function(data){
 
 group_data <- function(data){
   data %>% 
-    group_by(Area,
-             VehPower,
-             VehBrand,
-             VehGas,
-             Region,
-             DrivAgeBand,
-             DensityBand,
-             VehAgeBand) %>% 
-    summarize(ClaimNb = sum(ClaimNb),
-              ClaimAmount = sum(ClaimAmount),
-              Exposure = sum(Exposure)) %>% 
+    # group_by(Area,
+    #          VehPower,
+    #          VehBrand,
+    #          VehGas,
+    #          Region,
+    #          DrivAgeBand,
+    #          DensityBand,
+    #          VehAgeBand) %>% 
+    # summarize(ClaimNb = sum(ClaimNb),
+    #           ClaimAmount = sum(ClaimAmount),
+    #           Exposure = sum(Exposure)) %>% 
     mutate(Severity = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb),
            Loss_Cost = ClaimAmount / Exposure) %>% 
     ungroup()
@@ -63,9 +63,9 @@ create_data_sev <- function(data){
                         0, 
                       data = data)}
 
-create_data_lc <- function(data){
+create_data_losses <- function(data){
   
-  sparse.model.matrix(Loss_Cost ~
+  sparse.model.matrix(ClaimAmount ~
                         Area +
                         VehPower +
                         VehBrand +
@@ -118,15 +118,15 @@ gini_plot <- function(predicted_loss_cost, exposure){
   
   dataset %>% 
     arrange(lc_var) %>% 
-    mutate(cum_exp = cumsum(exp) / sum(exp),
-           cum_pred_lc = cumsum(lc_var) / sum(lc_var)) %>% 
+    mutate(pred_losses = lc_var * exp,
+           cum_exp = cumsum(exp) / sum(exp),
+           cum_pred_lc = cumsum(pred_losses) / sum(pred_losses)) %>% 
     ggplot() +
     geom_line(aes(x = cum_exp, y = cum_pred_lc)) +
     geom_abline(intercept = 0, slope = 1) +
-    xlab("Exposure") +
-    ylab("Predicted Loss Cost") + 
+    xlab("Percentage of Exposure") +
+    ylab("Percentage of Losses") + 
     theme_project
-  
 }
 
 lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, n) {
@@ -138,7 +138,7 @@ lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, 
   )
 
   dataset <- dataset %>%
-    mutate(buckets = ntile(exp, n)) %>%
+    mutate(buckets = cut_interval(cumsum(exp), n = n, labels = 1:n)) %>%
     group_by(buckets) %>%
     summarise(
       Predicted_Risk_Premium = mean(pred_lc, na.rm = TRUE),
@@ -146,12 +146,12 @@ lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, 
       Exposure = sum(exp)
     )
 
-  max_bucket <- which.max(dataset$Exposure)
+max_bucket <- which.max(dataset$Exposure)
   dataset <- dataset %>%
-    mutate(
-      base_predicted_rp = dataset[max_bucket, ]$Predicted_Risk_Premium,
-      base_observed_rp = dataset[max_bucket, ]$Observed_Risk_Premium,
-    )
+  mutate(
+    base_predicted_rp = dataset[max_bucket, ]$Predicted_Risk_Premium,
+    base_observed_rp = dataset[max_bucket, ]$Observed_Risk_Premium,
+  )
 
   dataset %>%
     mutate(
@@ -166,21 +166,21 @@ lift_curve_table <- function(predicted_loss_cost, observed_loss_cost, exposure, 
 }
 
 lift_curve_plot <- function(tbl_in) {
-
+  
+  scale_factor <-  max(c(tbl_in$Predicted_Risk_Premium, tbl_in$Observed_Risk_Premium)) / max(tbl_in$Exposure)
+  
   tbl_in %>%
     tidyr::pivot_longer(c(Predicted_Risk_Premium, Observed_Risk_Premium)) %>%
     mutate(buckets = as.factor(buckets)) %>%
     ggplot() +
-    geom_bar(aes(x = buckets, y = Exposure * ( max( c(tbl_in$Predicted_Risk_Premium, tbl_in$Observed_Risk_Premium) ) / 
-                                                 max(tbl_in$Exposure) )),
+    geom_bar(aes(x = buckets, y = .5 * Exposure * scale_factor),
              stat="identity", alpha = 0.5, fill="grey")+
     geom_point(aes(x = buckets, y = value, col = name, group = name), size = 3.5) +
     geom_line(aes(x = buckets, y = value, col = name, group = name), size = 4) +
     labs(x = "Bucket", y = "Average Risk Premium") +
-    scale_y_continuous(sec.axis = sec_axis(~./( max( c(tbl_in$Predicted_Risk_Premium, tbl_in$Observed_Risk_Premium) ) / 
-                                                  max(tbl_in$Exposure) )*1000), 
-                                           name = "Exposure (k)") +
-    theme_project + 
+    scale_y_continuous(sec.axis = sec_axis(~./ (scale_factor * 1000),
+                                           name = "Exposure (k)")) +
+    theme_project +
     labs(color = "")
 }
 
@@ -202,7 +202,7 @@ double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod
   dataset <- dataset %>%
     mutate(sort_ratio = pred_lc_m1 / pred_lc_m2) %>%
     arrange(exp) %>% 
-    mutate(buckets = ntile(exp, n)) %>% 
+    mutate(buckets = cut_interval(cumsum(exp), n = n, labels = 1:n)) %>% 
     group_by(buckets) %>% 
     summarise(
       Model_1_Predicted_Risk_Premium = mean(pred_lc_m1),
