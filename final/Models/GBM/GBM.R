@@ -25,7 +25,7 @@ xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
 
 xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
 
-xgb_model_losses <- xgb.load("./Models/GBM/xgb_loss_cost")
+xgb_model_losses <- xgb.load("./Models/GBM/xgb_losses")
 
 # Create datasets for xgboost ---------------------------------------------
 
@@ -168,7 +168,7 @@ sev_pred <- predict(xgb_model_sev, test_sev)
 #                           verbose = 1,
 #                           print_every_n = 100)
 # 
-# xgb.save(xgb_model_losses, "./Models/GBM/xgb_loss_cost")
+# xgb.save(xgb_model_losses, "./Models/GBM/xgb_losses")
 
 importance_matrix_losses <- xgb.importance(colnames(train_losses), model = xgb_model_losses)
 

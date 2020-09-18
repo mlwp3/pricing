@@ -5,6 +5,8 @@ library(magrittr)
 library(caret)
 library(pracma)
 library(tweedie)
+library(tweedie)
+library(statmod)
 
 # Import Data Functions ----------------------------------------------------
 
@@ -247,4 +249,151 @@ double_lift_chart <- function(predicted_loss_cost_mod_1, predicted_loss_cost_mod
     labs(x = "Bucket", y = "Average Risk Premium") +
     theme_project + 
     labs(color = "")
+}
+
+plot_act_metrics <- function(data, var, n = 10, categorical = FALSE){
+  
+  if (!categorical) {
+    table <- data %>%
+      mutate(feature = ntile({{var}}, n)) %>%
+      group_by(feature) %>%
+      summarise(prem = sum(premium),
+                exp = sum(exposure),
+                losses = sum(losses),
+                count = sum(numbers)) %>%
+      mutate(loss_cost = losses / exp,
+             loss_ratio = losses / prem,
+             frequency = count / exp,
+             severity = losses / count) %>%
+      na.omit()  
+  
+    } else {
+    
+    table <- data %>%
+      mutate(feature = as_factor({{var}})) %>%
+      group_by(feature) %>%
+      summarise(prem = sum(premium),
+                exp = sum(exposure),
+                losses = sum(losses),
+                count = sum(numbers)) %>%
+      mutate(loss_cost = losses / exp,
+             loss_ratio = losses / prem,
+             frequency = count / exp,
+             severity = losses / count) %>%
+      na.omit()
+  }
+  
+  plot_lr <- table %>%
+    ggplot()+
+    geom_bar(aes(x = as.factor(feature), y = prem * (max(table$loss_ratio) / max(table$prem))), alpha = .5,
+             stat="identity", fill="slategrey")+
+    geom_line(aes(x = as.factor(feature), y = loss_ratio, group = 1), col = scales::hue_pal()(4)[1])+
+    xlab(enquo(var)) +
+    scale_y_continuous(sec.axis = sec_axis(~./((max(table$loss_ratio) / max(table$prem))*1000000), name = "Premium (m)"))+
+    labs(y = "Loss Ratio")+
+    ggtitle("Loss Ratio")
+  
+  plot_lc <- table %>%
+    ggplot()+
+    geom_bar(aes(x = as.factor(feature), y = exp * (max(table$loss_cost) / max(table$exp))), alpha = .5,
+             stat="identity", fill="slateblue2")+
+    geom_line(aes(x = as.factor(feature), y = loss_cost, group = 1), col = scales::hue_pal()(4)[2])+
+    xlab(enquo(var))+
+    scale_y_continuous(sec.axis = sec_axis(~./((max(table$loss_cost) / max(table$exp))*1000), name = "Exposure (k)"))+
+    labs(y = "Loss Cost")+
+    ggtitle("Loss Cost")
+  
+  plot_freq <- table %>%
+    
+    ggplot()+
+    geom_bar(aes(x = as.factor(feature), y = exp * (max(table$frequency) / max(table$exp))), alpha = .5,
+             stat="identity", fill="slateblue2")+
+    geom_line(aes(x = as.factor(feature), y = frequency, group = 1), col = scales::hue_pal()(4)[3])+
+    xlab(enquo(var))+
+    scale_y_continuous(sec.axis = sec_axis(~./((max(table$frequency) / max(table$exp))*1000), name = "Exposure (k)"))+
+    labs(y = "Frequency")+
+    ggtitle("Frequency")
+
+  plot_sev <- table %>%
+    ggplot()+
+    geom_bar(aes(x = as.factor(feature), y = count * (max(table$severity) / max(table$count))), alpha = .5,
+             stat="identity", fill="peachpuff3")+
+    geom_line(aes(x = as.factor(feature), y = severity, group = 1), col = scales::hue_pal()(4)[4])+
+    xlab(enquo(var))+
+    scale_y_continuous(sec.axis = sec_axis(~./((max(table$severity) / max(table$count))*1000), name = "Numbers (k)"))+
+    labs(y = "Severity")+
+    ggtitle("Severity")
+
+  g <- grid.arrange(plot_lr, plot_lc, plot_freq, plot_sev,
+                    ncol = 2, nrow = 2,
+                    top = textGrob(rlang::as_name(enquo(var)), gp = gpar(fontsize=15)))
+}
+
+eval_act_metrics <- function(data, var, predicted_freq_sev, predicted_loss_cost, n = 10, categorical = FALSE){
+  
+  data <- data %>%
+    mutate(losses_freq_sev = {{predicted_freq_sev}} * exposure,
+           losses_loss_cost = {{predicted_loss_cost}} * exposure)
+  
+  if (!categorical) {
+
+  table <- data %>%
+      mutate(feature = ntile({{var}}, n)) %>%
+      group_by(feature) %>%
+      summarise(exp = sum(exposure),
+                obs_losses = sum(losses),
+                pred_lc_freq_sev = sum(losses_freq_sev),
+                pred_lc_lc = sum(losses_loss_cost)) %>%
+      mutate(obs_lc = obs_losses / exp,
+             pred_freq_sev = pred_lc_freq_sev / exp,
+             pred_lc = pred_lc_lc / exp) %>%
+      na.omit()
+    
+  } else {
+    
+    table <- data %>%
+      mutate(feature = as_factor({{var}})) %>%
+      group_by(feature) %>%
+      summarise(exp = sum(exposure),
+                obs_losses = sum(losses),
+                pred_lc_freq_sev = sum(losses_freq_sev),
+                pred_lc_lc = sum(losses_loss_cost)) %>%
+      mutate(obs_lc = obs_losses / exp,
+             pred_freq_sev = pred_lc_freq_sev / exp,
+             pred_lc = pred_lc_lc / exp) %>%
+      na.omit()
+    
+  }
+  
+  scale_factor <- max(c(table$pred_lc, table$pred_freq_sev, table$obs_lc)) / max(table$exp)
+  
+  table %>%
+    select(feature, exp, obs_lc, pred_freq_sev, pred_lc) %>%
+    tidyr::pivot_longer(c(obs_lc, pred_freq_sev, pred_lc)) %>%
+    ggplot()+
+    geom_bar(aes(x = as.factor(feature), y = 1/3 * exp * scale_factor), alpha = .5,
+             stat="identity", fill="grey")+
+    geom_line(aes(x = as.factor(feature), y = value, group = name, col = name))+
+    geom_point(aes(x = as.factor(feature), y = value, col = name))+
+    xlab(enquo(var)) +
+    scale_y_continuous(sec.axis = sec_axis(~./(scale_factor * 1000), name = "Exposure (k)"))+
+    labs(y = "Loss Cost")+
+    ggtitle(paste0("Loss Cost Comparison ", rlang::as_name(enquo(var))))+
+    labs(color = "")
+}
+
+strip_glm = function(model){
+  
+  model$data <- NULL
+  model$y <- NULL
+  model$linear.predictors <- NULL
+  model$weights <- NULL
+  model$fitted.values <- NULL
+  model$model <- NULL
+  model$prior.weights <- NULL
+  model$residuals <- NULL
+  model$effects <- NULL
+  model$qr$qr <- NULL
+  
+  return(model)
 }
