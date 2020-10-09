@@ -61,5 +61,5 @@ var(train$ClaimAmount)
 var(test$ClaimAmount)
 rm(ind)
 
-readr::write_csv(train, "~/Desktop/CAS MLWP/Pricing/freMTPL Data/train_new_final.csv")
-readr::write_csv(test, "~/Desktop/CAS MLWP/Pricing/freMTPL Data/test_new_final.csv")
+write_csv(train, "./train.csv")
+write_csv(test, "./test.csv")
