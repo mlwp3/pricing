@@ -52,19 +52,26 @@ fs_pred <- predict(freq_mod, newdata = test, type="response")*predict(sev_mod, n
 
 test <- test %>% mutate(observed_loss_cost = ClaimAmount / Exposure,
                         predicted_loss_cost_fs = fs_pred / Exposure)
-
 FS_rmse <- rmse(test,"observed_loss_cost", test$predicted_loss_cost_fs)*100 #73.52
 FS_nrmse <- 1-NRMSE(test,"observed_loss_cost", test$predicted_loss_cost_fs)*100 #0.3684164
 FS_cor_pearson <- as.numeric(cor(test$predicted_loss_cost_fs,test$observed_loss_cost))
 FS_cor_spearman <- as.numeric(cor(test$predicted_loss_cost_fs,test$observed_loss_cost,method="spearman"))
-FS_mae <- 1-MAE(test$predicted_loss_cost_fs, test$observed_loss_cost)*100
-FS_nmae <- NMAE(test$predicted_loss_cost_fs, test$observed_loss_cost)
+FS_mae <- MAE(test$predicted_loss_cost_fs, test$observed_loss_cost)
+FS_nmae <- 1-NMAE(test$predicted_loss_cost_fs, test$observed_loss_cost)*100
 FS_gini <- gini_value(test$predicted_loss_cost_fs,test$Exposure) #0.1756933
 FS_agg_rpr <- agg_rpr(test, "observed_loss_cost", test$predicted_loss_cost_fs)
 FS_norm_rpd <- norm_rp_deviance(test, "observed_loss_cost", test$predicted_loss_cost_fs)
 
 model_metrics <- data.frame("MARS Freq/Sev", FS_rmse, FS_mae, FS_cor_pearson, FS_cor_spearman, FS_gini, FS_agg_rpr)
 colnames(model_metrics) <- c("Model", "RMSE", "MAE", "Pearson (Linear) Correlation", "Spearman Rank Correlation", "Gini Index", "Aggregate Risk Premium Differential")
+eval_metrics <- data.frame(FS_gini, FS_nrmse, FS_nmae, FS_cor_spearman, FS_norm_rpd)
+lscore <- apply(eval_metrics, 1, mean)
+gscore <- apply(eval_metrics, 1, geometric_mean)
+hscore <- apply(eval_metrics, 1, harmonic_mean)
+model_metrics$lscore <- lscore
+model_metrics$gscore <- gscore
+model_metrics$hscore <- hscore
+model_metrics[is.na(model_metrics)] <- 0
 
 write.csv(model_metrics,"final/Output/MARS/MARS_model_evaluation_stats.csv")
 
