@@ -3,11 +3,17 @@ library(tweedie)
 library(statmod)
 library(tidyverse)
 library(splines)
-source("final/Utils/utils.R")
-train <- import_data("final/Data/train_new_final.csv") %>% mutate(id = "train")
-train$severity <- train$ClaimAmount / train$ClaimNb
+library(glmnet)
 
-test <- import_data("final/Data/test_new_final.csv") %>% mutate(id = "test")
+rm(list=ls())
+
+source("final/Utils/Utils.R")
+source("final/Utils/perf_eval.R")
+
+train <- import_data("final/Data/train.csv") %>% mutate(severity=ClaimAmount/ClaimNb)
+sev_train <- train %>% filter(ClaimAmount>0) #It's about the same if you choose claim amount > 0 or > 100
+
+test <- import_data("final/Data/test.csv") %>% mutate(severity=ClaimAmount/ClaimNb)
 
 freq_mod <- earth(ClaimNb ~ Area +
                     VehPower +
@@ -16,95 +22,111 @@ freq_mod <- earth(ClaimNb ~ Area +
                     Region +
                     DrivAgeBand +
                     DensityBand + 
-                    VehAgeBand + offset(log(Exposure)), data = train, degree = 3, glm=list(family=poisson(link="log")))
+                    VehAgeBand + offset(log(Exposure)), data = train, degree = 2, glm=list(family=poisson(link="log")))
 summary(freq_mod)
 
-#The severity model is based on only those claims for which the claim amount is nonzero.
-sev_train <- train[which(train$ClaimAmount > 0),]
-summary(sev_train)
-quantile(sev_train$severity,c((50:99)/100))
-sev_train$c_severity <- pmin(sev_train$severity,5000)
-# smod <- glm(c_severity ~ Area +
-#               VehPower +
-#               VehBrand +
-#               VehGas +
-#               Region +
+# fmod <- glm(ClaimNb ~ (VehBrand=='B12')+
+#               (VehGas=='Regular') +
+#               (Region=='R24') +
+#               (Region=='R53') +
 #               DrivAgeBand +
-#               DensityBand +
-#               VehAgeBand, weights=ClaimNb, data=sev_train, family=Gamma(link="log"))
-# summary(smod)
-#
-sev_mod <- earth(c_severity ~ Area +
+#               (VehBrand=='B12'):(DrivAgeBand=='(65,Inf]'), offset=log(Exposure), data=train, family=poisson(link="log"))
+# summary(fmod)
+
+sev_mod <- earth(pmin(severity,5000) ~ Area +
                    VehPower +
                    VehBrand +
                    VehGas +
                    Region +
                    DrivAgeBand +
                    DensityBand + 
-                   VehAgeBand, data = sev_train, weights=ClaimNb, degree = 3, glm=list(family=Gamma(link="log")))
+                   VehAgeBand, data = sev_train, weights=ClaimNb, degree = 1, glm=list(family=Gamma(link="log")))
+summary(sev_mod)
+
+# smod <- glm(pmin(severity,5000) ~
+#               (Region=='R93') +
+#               (VehBrand=='B12'), weights=ClaimNb, data=sev_train, family=Gamma(link="log"))
+# summary(smod)
+
+fs_pred <- predict(freq_mod, newdata = test, type="response")*predict(sev_mod, newdata = test, type="response")
+
+test <- test %>% mutate(observed_loss_cost = ClaimAmount / Exposure,
+                        predicted_loss_cost_fs = fs_pred / Exposure)
+
+FS_rmse <- rmse(test,"observed_loss_cost", test$predicted_loss_cost_fs)*100 #73.52
+FS_nrmse <- 1-NRMSE(test,"observed_loss_cost", test$predicted_loss_cost_fs)*100 #0.3684164
+FS_cor_pearson <- as.numeric(cor(test$predicted_loss_cost_fs,test$observed_loss_cost))
+FS_cor_spearman <- as.numeric(cor(test$predicted_loss_cost_fs,test$observed_loss_cost,method="spearman"))
+FS_mae <- 1-MAE(test$predicted_loss_cost_fs, test$observed_loss_cost)*100
+FS_nmae <- NMAE(test$predicted_loss_cost_fs, test$observed_loss_cost)
+FS_gini <- gini_value(test$predicted_loss_cost_fs,test$Exposure) #0.1756933
+FS_agg_rpr <- agg_rpr(test, "observed_loss_cost", test$predicted_loss_cost_fs)
+FS_norm_rpd <- norm_rp_deviance(test, "observed_loss_cost", test$predicted_loss_cost_fs)
+
+model_metrics <- data.frame("MARS Freq/Sev", FS_rmse, FS_mae, FS_cor_pearson, FS_cor_spearman, FS_gini, FS_agg_rpr)
+colnames(model_metrics) <- c("Model", "RMSE", "MAE", "Pearson (Linear) Correlation", "Spearman Rank Correlation", "Gini Index", "Aggregate Risk Premium Differential")
+
+write.csv(model_metrics,"final/Output/MARS/MARS_model_evaluation_stats.csv")
+
+#Pure Premium MARS model basically doesn't work at all. Not yet at least?
+#It picks up no predictors at all.
+#I think that the severities are messing it up?
+#####################################################
+# p_values <- seq(1.4, 1.6, length = 8)
+# p_tuning <- tweedie.profile(ClaimAmount ~ Area +
+#                               VehPower +
+#                               VehBrand +
+#                               VehGas +
+#                               Region +
+#                               DrivAgeBand +
+#                               DensityBand + 
+#                               VehAgeBand + offset(log(Exposure)), data = train, p.vec = p_values, do.plot = FALSE, 
+#                               verbose = 2, do.smooth = TRUE, method = "series", fit.glm = FALSE)
+# p <- p_tuning$p.max #1.555102
+# p_tuning$p.max
+# rm(p_values)
 # 
-# sev_mod <- earth(pmin(severity,10000) ~ Area +
+# p <- 1.555102
+# 
+# pp_mod <- earth(pmin(ClaimAmount,5000) ~ Area +
+#                   VehPower +
+#                   VehBrand +
+#                   VehGas +
+#                   Region +
+#                   DrivAgeBand +
+#                   DensityBand + 
+#                   VehAgeBand + offset(log(Exposure)), data = train, degree = 2, glm=list(family = tweedie(var.power = p, link.power = 0)))
+# summary(pp_mod)
+# 
+# pp_mod2 <- earth(pmin(round(ClaimAmount,0),5000) ~ Area +
 #                    VehPower +
 #                    VehBrand +
 #                    VehGas +
 #                    Region +
 #                    DrivAgeBand +
 #                    DensityBand + 
-#                    VehAgeBand, data = sev_train, degree = 5, glm=list(family=Gamma(link="log")))
-str(sev_train)
-summary(sev_mod)
-summary(sev_train$severity)
-
-# fs_pred <- predict(freq_mod, newdata = test)*predict(sev_mod, newdata = test)
-# RMSE(fs_pred,test$ClaimAmount) #2069.684
-# NRMSE(fs_pred,test$ClaimAmount) #0.005296801
-# gini_value(as.numeric(fs_pred),test$Exposure) #-0.05571802
+#                    VehAgeBand + offset(log(Exposure)), data = train, degree = 2, glm=list(family = poisson(link="log")))
 # 
-# gini_plot_fs <- gini_plot(as.numeric(fs_pred),test$Exposure) + 
-#   ggtitle("Frequency x Severity MARS Gini Plot")
+# summary(pp_mod2)
 # 
-# tbl_lift_fs <- lift_curve_table(as.numeric(fs_pred), test$ClaimAmount, test$Exposure,10)
-# plt_lift_fs <- tbl_lift_fs %>% 
-#   lift_curve_plot() +   
-#   labs(col = "Model")
-# plt_lift_fs
-
-p_values <- seq(1.3, 1.6, length = 8)
-p_tuning <- tweedie.profile(ClaimAmount ~ Area +
-                              VehPower +
-                              VehBrand +
-                              VehGas +
-                              Region +
-                              DrivAgeBand +
-                              DensityBand + 
-                              VehAgeBand + offset(log(Exposure)), data = train, p.vec = p_values, do.plot = FALSE, 
-                              verbose = 2, do.smooth = TRUE, method = "series", fit.glm = FALSE)
-p <- p_tuning$p.max #1.55277
-rm(p_values)
-
-pp_mod <- earth(ClaimAmount ~ Area +
-                  VehPower +
-                  VehBrand +
-                  VehGas +
-                  Region +
-                  DrivAgeBand +
-                  DensityBand + 
-                  VehAgeBand + offset(log(Exposure)), data = train, degree = 3, glm=list(family = tweedie(var.power = p, link.power = 0)))
-
-summary(pp_mod)
-
-# pp_pred <- predict(pp_mod, newdata = test)
-# RMSE(pp_pred,test$ClaimAmount) #2055.142
-# NRMSE(pp_pred,test$ClaimAmount) #0.005259585
-# gini_value(as.numeric(pp_pred),test$Exposure) #0.9236354
+# pp_mod <- glm(pmin(round(ClaimAmount,0),5000) ~ Area +
+#                   VehPower +
+#                   VehBrand +
+#                   VehGas +
+#                   Region +
+#                   DrivAgeBand +
+#                   DensityBand + 
+#                   VehAgeBand + offset(log(Exposure)), data = train, family = poisson(link="log"))
+# summary(pp_mod)
 # 
-# gini_plot_pp <- gini_plot(as.numeric(pp_pred),test$Exposure) + 
-#   ggtitle("Pure Premium MARS Gini Plot")
+# plot(density(log(sev_train$severity)))
+# plot(density(log(sev_train$ClaimAmount)))
 # 
-# tbl_lift_pp <- lift_curve_table(as.numeric(pp_pred),test$ClaimAmount,test$Exposure,10)
+# pp_pred <- predict(pp_mod, newdata = test, type="response")
+# pp_pred2 <- predict(pp_mod2, newdata=test, type="response")
 # 
-# plt_lift_pp <- tbl_lift_pp %>% 
-#   lift_curve_plot() + 
-#   labs(col = "Model")
+# rmse(test, "ClaimAmount",pp_pred) #19.94898
+# rmse(test, "ClaimAmount",pp_pred2) #19.95066
+# NRMSE(test, "ClaimAmount", pp_pred) #.000499707
+# NRMSE(test, "ClaimAmount", pp_pred2) #.000499749
 # 
-# plt_lift_pp
