@@ -8,7 +8,8 @@ source("./Utils/utils.R")
 
 # Import Data -------------------------------------------------------------
 
-train <- import_data("./Data/train.csv") %>% group_data()
+train <- import_data("./Data/train.csv") %>%
+          mutate(Severity = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb))
 
 test <- import_data("./Data/test.csv") %>% 
         mutate(Severity = ifelse(ClaimNb == 0, 0, ClaimAmount / ClaimNb))
@@ -21,11 +22,11 @@ validation <- anti_join(df, train, by = "id") %>% select(-id)
 
 train <- train %>% select(-id)
 
-xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
-
-xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
-
-xgb_model_losses <- xgb.load("./Models/GBM/xgb_losses")
+# xgb_model_numb <- xgb.load("./Models/GBM/xgb_numbers")
+#  
+# xgb_model_sev <- xgb.load("./Models/GBM/xgb_severity")
+# 
+# xgb_model_losses <- xgb.load("./Models/GBM/xgb_losses")
 
 # Create datasets for xgboost ---------------------------------------------
 
@@ -49,7 +50,7 @@ validation_sev <- xgb.DMatrix(data = create_data_sev(filter(validation, Severity
                               label = filter(validation, Severity > 0) %>% pull(Severity))
 
 validation_losses <- xgb.DMatrix(data = create_data_losses(validation), 
-                             label = validation %>% pull(Loss_Cost), 
+                             label = validation %>% pull(ClaimAmount), 
                              base_margin = validation %>% pull(Exposure) %>% log())
 
 test_numb <- xgb.DMatrix(data = create_data_numb(test), 
@@ -66,35 +67,35 @@ test_losses <- xgb.DMatrix(data = create_data_losses(test),
 # Model Section -----------------------------------------------------------
 
 # Numbers
-
+# 
 # DON'T RUN
-# 
-# params <- list(booster = "gbtree",
-#                tree_method = "hist",
-#                objective = "count:poisson",
-#                eval_metric = "poisson-nloglik",
-#                eta = .1,
-#                base_score = 1)
-# 
-# xgbcv_numb <- xgb.cv(params = params,
-#                      data = train_numb,
-#                      nrounds = 10000,
-#                      nfold = 5,
-#                      showsd = FALSE,
-#                      stratified = TRUE,
-#                      print_every_n = 100,
-#                      early_stop_round = 20,
-#                      maximize = FALSE,
-#                      prediction = TRUE)
-# 
-# xgb_model_numb <- xgb.train(data = train_numb,
-#                             params = params,
-#                             watchlist = list(train = train_numb, test = validation_numb),
-#                             nrounds = which.min(xgbcv_numb$evaluation_log$test_poisson_nloglik_mean),
-#                             verbose = 1,
-#                             print_every_n = 10)
-# 
-# xgb.save(xgb_model_numb, "./Models/GBM/xgb_numbers")
+
+params <- list(booster = "gbtree",
+               tree_method = "hist",
+               objective = "count:poisson",
+               eval_metric = "poisson-nloglik",
+               eta = .1,
+               base_score = 1)
+
+xgbcv_numb <- xgb.cv(params = params,
+                     data = train_numb,
+                     nrounds = 10000,
+                     nfold = 5,
+                     showsd = FALSE,
+                     stratified = TRUE,
+                     print_every_n = 100,
+                     early_stop_round = 20,
+                     maximize = FALSE,
+                     prediction = TRUE)
+
+xgb_model_numb <- xgb.train(data = train_numb,
+                            params = params,
+                            watchlist = list(train = train_numb, test = validation_numb),
+                            nrounds = which.min(xgbcv_numb$evaluation_log$test_poisson_nloglik_mean),
+                            verbose = 1,
+                            print_every_n = 10)
+
+xgb.save(xgb_model_numb, "./Models/GBM/xgb_numbers")
 
 importance_matrix_numb <- xgb.importance(colnames(train_numb), model = xgb_model_numb)
 
@@ -104,34 +105,34 @@ xgb.ggplot.importance(importance_matrix_numb, rel_to_first = TRUE, top_n = 10, n
 numb_pred <- predict(xgb_model_numb, test_numb)
 
 # Severity
-
+# 
 # DON'T RUN
-# 
-# params <- list(booster = "gbtree",
-#                tree_method = "hist",
-#                eval_metric = "gamma-nloglik",
-#                objective = "reg:gamma",
-#                eta = .1)
-# 
-# xgbcv_sev <- xgb.cv(params = params,
-#                     data = train_sev,
-#                     nrounds = 10000,
-#                     nfold = 5,
-#                     showsd = FALSE,
-#                     stratified = FALSE,
-#                     print_every_n = 100,
-#                     early_stop_round = 20,
-#                     maximize = FALSE,
-#                     prediction = TRUE)
-# 
-# xgb_model_sev <- xgb.train(data = train_sev,
-#                            params = params,
-#                            watchlist = list(train = train_sev, test = validation_sev),
-#                            nrounds = which.min(xgbcv_sev$evaluation_log$test_gamma_nloglik_mean),
-#                            verbose = 1,
-#                            print_every_n = 100)
-# 
-# xgb.save(xgb_model_sev, "./Models/GBM/xgb_severity")
+
+params <- list(booster = "gbtree",
+               tree_method = "hist",
+               eval_metric = "gamma-nloglik",
+               objective = "reg:gamma",
+               eta = .3)
+
+xgbcv_sev <- xgb.cv(params = params,
+                    data = train_sev,
+                    nrounds = 10000,
+                    nfold = 5,
+                    showsd = FALSE,
+                    stratified = FALSE,
+                    print_every_n = 100,
+                    early_stop_round = 20,
+                    maximize = FALSE,
+                    prediction = TRUE)
+
+xgb_model_sev <- xgb.train(data = train_sev,
+                           params = params,
+                           watchlist = list(train = train_sev, test = validation_sev),
+                           nrounds = which.min(xgbcv_sev$evaluation_log$test_gamma_nloglik_mean),
+                           verbose = 1,
+                           print_every_n = 100)
+
+xgb.save(xgb_model_sev, "./Models/GBM/xgb_severity")
 
 importance_matrix_sev <- xgb.importance(colnames(train_sev), model = xgb_model_sev)
 
@@ -141,34 +142,34 @@ xgb.ggplot.importance(importance_matrix_sev, rel_to_first = TRUE, top_n = 10, n_
 sev_pred <- predict(xgb_model_sev, test_sev)
 
 # Loss Cost
-
+# 
 # DON'T RUN
-# 
-# params <- list(booster = "gbtree",
-#                tree_method = "hist",
-#                eval_metric = "tweedie-nloglik@1.6",
-#                objective = "reg:tweedie",
-#                eta = .1,
-#                base_score = 1)
-# 
-# xgbcv_losses <- xgb.cv(params = params,
-#                    data = train_losses,
-#                    nrounds = 10000,
-#                    nfold = 5,
-#                    print_every_n = 100,
-#                    showsd = FALSE,
-#                    early_stop_round = 20,
-#                    maximize = FALSE,
-#                    prediction = TRUE)
-# 
-# xgb_model_losses <- xgb.train(data = train_losses,
-#                           params = params,
-#                           watchlist = list(train = train_losses, test = validation_losses),
-#                           nrounds = which.min(xgbcv_losses$evaluation_log$`test_tweedie_nloglik@1.6_mean`),
-#                           verbose = 1,
-#                           print_every_n = 100)
-# 
-# xgb.save(xgb_model_losses, "./Models/GBM/xgb_losses")
+
+params <- list(booster = "gbtree",
+               tree_method = "hist",
+               eval_metric = "tweedie-nloglik@1.6",
+               objective = "reg:tweedie",
+               eta = .1,
+               base_score = 1)
+
+xgbcv_losses <- xgb.cv(params = params,
+                   data = train_losses,
+                   nrounds = 10000,
+                   nfold = 5,
+                   print_every_n = 100,
+                   showsd = FALSE,
+                   early_stop_round = 20,
+                   maximize = FALSE,
+                   prediction = TRUE)
+
+xgb_model_losses <- xgb.train(data = train_losses,
+                          params = params,
+                          watchlist = list(train = train_losses, test = validation_losses),
+                          nrounds = which.min(xgbcv_losses$evaluation_log$`test_tweedie_nloglik@1.6_mean`),
+                          verbose = 1,
+                          print_every_n = 100)
+
+xgb.save(xgb_model_losses, "./Models/GBM/xgb_losses")
 
 importance_matrix_losses <- xgb.importance(colnames(train_losses), model = xgb_model_losses)
 
@@ -179,13 +180,17 @@ losses_pred <- predict(xgb_model_losses, test_losses)
 
 # Performance Evaluation --------------------------------------------------
 
-test <- test %>% mutate(observed_loss_cost = ClaimAmount / Exposure,
+test <- test %>% mutate(observed_loss_cost = ClaimAmount,
                         predicted_numb = numb_pred,
                         predicted_sev = sev_pred,
-                        predicted_loss_cost_freq_sev = numb_pred * sev_pred / Exposure,
-                        predicted_loss_cost = losses_pred / Exposure)
+                        predicted_loss_cost_freq_sev = numb_pred * sev_pred,
+                        predicted_loss_cost = losses_pred)
 
 eval_dataset <- test %>% select(Exposure, observed_loss_cost, predicted_loss_cost_freq_sev, predicted_loss_cost)
+
+eval_dataset %$% RMSE(predicted_loss_cost_freq_sev, observed_loss_cost)
+
+eval_dataset %$% RMSE(predicted_loss_cost, observed_loss_cost)
 
 eval_dataset %$% NRMSE(predicted_loss_cost_freq_sev, observed_loss_cost)
 
@@ -221,7 +226,7 @@ test %>% select(RecordID,
                 predicted_sev,
                 predicted_loss_cost_freq_sev,
                 predicted_loss_cost) %>% 
-                mutate(Loss_Cost = ClaimAmount / Exposure) %>% 
+                mutate(Loss_Cost = ClaimAmount) %>% 
                 select(RecordID,
                        Exposure,
                        ClaimNb,
