@@ -1,0 +1,2 @@
+"","Model","RMSE","MAE","Pearson (Linear) Correlation","Spearman Rank Correlation","Gini Index","Aggregate Risk Premium Differential","lscore","gscore","hscore"
+"1","MARS Freq/Sev",7352.00002500013,303.807140955143,0.00689640655239815,0.0223148845081504,0.175693317265541,2.11593439220617,0.410984880847046,0,0.113877130739831
