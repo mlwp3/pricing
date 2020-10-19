@@ -10,6 +10,8 @@ rm(list=ls())
 source("final/Utils/Utils.R")
 source("final/Utils/perf_eval.R")
 
+set.seed(42)
+
 train <- import_data("final/Data/train.csv") %>% mutate(severity=ClaimAmount/ClaimNb)
 sev_train <- train %>% filter(ClaimAmount>0) #It's about the same if you choose claim amount > 0 or > 100
 
@@ -33,20 +35,23 @@ summary(freq_mod)
 #               (VehBrand=='B12'):(DrivAgeBand=='(65,Inf]'), offset=log(Exposure), data=train, family=poisson(link="log"))
 # summary(fmod)
 
-sev_mod <- earth(pmin(severity,5000) ~ Area +
+sev_mod <- earth(severity ~ Area +
                    VehPower +
                    VehBrand +
                    VehGas +
                    Region +
                    DrivAgeBand +
-                   DensityBand + 
-                   VehAgeBand, data = sev_train, weights=ClaimNb, degree = 1, glm=list(family=Gamma(link="log")))
+                   DensityBand +
+                   VehAgeBand, data = sev_train, weights=ClaimNb, degree = 2, glm=list(family=Gamma(link="log")))
 summary(sev_mod)
 
-# smod <- glm(pmin(severity,5000) ~
-#               (Region=='R93') +
-#               (VehBrand=='B12'), weights=ClaimNb, data=sev_train, family=Gamma(link="log"))
-# summary(smod)
+# sev_mod <- glm(severity ~ (VehBrand=='B11') +
+#                (Region=='R21') +
+#                and((Area=='C'),(Region=='R21')) +
+#                and((VehPower=='7'),(Region=='R21')) +
+#                and((Region=='R21'),(DrivAgeBand=='(35,45]')) +
+#                and((Region=='R21'),(VehAgeBand=='1')), weights=ClaimNb, data=sev_train, family=Gamma(link="log"))
+# summary(sev_mod)
 
 fs_pred <- predict(freq_mod, newdata = test, type="response")*predict(sev_mod, newdata = test, type="response")
 
@@ -68,6 +73,11 @@ eval_metrics <- data.frame(FS_gini, FS_nrmse, FS_nmae, FS_cor_spearman, FS_norm_
 lscore <- apply(eval_metrics, 1, mean)
 gscore <- apply(eval_metrics, 1, geometric_mean)
 hscore <- apply(eval_metrics, 1, harmonic_mean)
+
+exp(mean(log(c(FS_gini,FS_nrmse,FS_nmae,FS_cor_spearman,FS_norm_rpd))))
+mean(test$predicted_loss_cost_fs)
+mean(test$observed_loss_cost)
+
 model_metrics$lscore <- lscore
 model_metrics$gscore <- gscore
 model_metrics$hscore <- hscore
