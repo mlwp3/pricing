@@ -3,11 +3,14 @@
 import pandas as pd
 
 def load_file():
-    data_train_file = r'../../final/Data/train_new_final.csv'
-    data_train = pd.read_csv(data_train_file).set_index('RecordID')
+    data_train_file = r'../../final/Data/train.csv'
+    data_train = pd.read_csv(data_train_file).set_index('IDpol').drop('RecordID', axis='columns')
     
-    data_test_file = r'../../final/Data/test_new_final.csv'
-    data_test = pd.read_csv(data_test_file).set_index('RecordID')
+    data_test_file = r'../../final/Data/test.csv'
+    data_test = pd.read_csv(data_test_file).set_index('IDpol').drop('RecordID', axis='columns')
+    
+    data_train['VehAgeBand'] = data_train['VehAgeBand'].astype(str)
+    data_test['VehAgeBand']  = data_test['VehAgeBand'].astype(str)
     
     return data_train, data_test
     
