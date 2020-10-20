@@ -26,11 +26,11 @@ write_csv(model_metrics, "../../Output/RF/RF_model_evaluation_stats.csv")
 
 # write charts
 
-test_output %$% gini_plot(predicted_total, Exposure) + ggtitle("Gini index Loss Cost") + ggsave("../../Output/RF/gini_loss_cost.png")
+test_output %$% gini_plot(predicted_total, Exposure) + ggtitle("Gini index Loss Cost") + ggsave("../../Output/RF/gini_loss_cost.png",  scale = 3, dpi = 300)
 
 test_output %$% lift_curve_table(predicted_total, ClaimAmount, Exposure, 20) %>% 
-  lift_curve_plot() + ggtitle("Lift Curve Freq / Sev") + ggsave("../../Output/RF/lift_curve_freq_sev.png")
+  lift_curve_plot() + ggtitle("Lift Curve Freq / Sev") + ggsave("../../Output/RF/lift_curve_freq_sev.png",  scale = 3, dpi = 300)
 
 test_output %$% lift_curve_table(predicted_total, ClaimAmount, Exposure, 20) %>% 
-  lift_curve_plot() + ggtitle("Lift Curve Loss Cost") + ggsave("../../Output/RF/lift_curve_loss_cost.png")
+  lift_curve_plot() + ggtitle("Lift Curve Loss Cost") + ggsave("../../Output/RF/lift_curve_loss_cost.png",  scale = 3, dpi = 300)
 
