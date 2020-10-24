@@ -142,3 +142,6 @@ model_metrics$hscore <- hscore
 model_metrics[is.na(model_metrics)] <- 0
 
 write.csv(model_metrics,"final/Output/MARS/MARS_model_evaluation_stats.csv")
+
+test <- test %>% mutate(MARS_FS = fs_pred, MARS_PP = pp_pred)
+write_csv(test, "final/Output/MARS/test_w_predictions.csv")
