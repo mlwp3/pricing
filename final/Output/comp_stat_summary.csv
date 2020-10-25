@@ -1,9 +1,0 @@
-Model,Modelling Basis,NRMSE,Gini Index,1-NRMSE,linear,harmonic,geometric
-ML Stack,Pure Premium,,,,,,
-MARS,Pure Premium,,,,,,
-GLM,Freq/Sev,,,,,,
-GAM,Pure Premium,,,,,,
-GLM,Pure Premium,,,,,,
-MARS,Freq/Sev,,,,,,
-GBM,Freq/Sev,0.02115301,0.2248777,0.97884699,0.601862345,0.365732898214662,0.469170395233036
-GBM,Pure Premium,0.02132891,0.09994805,0.97867109,0.53930957,0.181373134240645,0.312755922464906
