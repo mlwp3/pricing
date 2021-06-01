@@ -85,18 +85,20 @@ NRMSE <- function(pred, obs){
   
 }
 
-gini_value <- function(predicted_loss_cost, exposure){
+gini_value <- function(observed_loss_cost, predicted_loss_cost, exposure){
   
-  lc_var <- enquo(predicted_loss_cost)
+  obs_lc <- enquo(observed_loss_cost)
+  pred_lc <- enquo(predicted_loss_cost)
   exp <- enquo(exposure)
   
-  dataset <- tibble(lc_var = !!lc_var, exp = !!exp)
+  dataset <- tibble(obs_lc = !!obs_lc, pred_lc = !!pred_lc, exp = !!exp)
   
   dataset %>% 
-    arrange(lc_var) %>% 
-    mutate(cum_exp = cumsum(exp) / sum(exp),
-           cum_pred_lc = cumsum(lc_var) / sum(lc_var)) %$% 
-    {trapz(cum_exp, cum_pred_lc) %>% add(-1) %>% abs() %>% subtract(.5) %>% multiply_by(2)}
+    arrange(pred_lc) %>% 
+    mutate(losses = obs_lc * exp,
+           cum_exp = cumsum(exp) / sum(exp),
+           cum_losses = cumsum(losses) / sum(losses)) %$%
+  {trapz(cum_exp, cum_losses) %>% add(-1) %>% abs() %>% subtract(.5) %>% multiply_by(2)}
 }
 
 #-------------------
@@ -111,20 +113,21 @@ theme_project <- theme(
   , legend.position = 'bottom'
 )
 
-gini_plot <- function(predicted_loss_cost, exposure){
+gini_plot <- function(observed_loss_cost, predicted_loss_cost, exposure){
   
-  lc_var <- enquo(predicted_loss_cost)
+  obs_lc <- enquo(observed_loss_cost)
+  pred_lc <- enquo(predicted_loss_cost)
   exp <- enquo(exposure)
   
-  dataset <- tibble(lc_var = !! lc_var, exp = !! exp)
+  dataset <- tibble(obs_lc = !!obs_lc, pred_lc = !!pred_lc, exp = !!exp)
   
   dataset %>% 
-    arrange(lc_var) %>% 
-    mutate(pred_losses = lc_var * exp,
+    arrange(pred_lc) %>% 
+    mutate(losses = obs_lc * exp,
            cum_exp = cumsum(exp) / sum(exp),
-           cum_pred_lc = cumsum(pred_losses) / sum(pred_losses)) %>% 
+           cum_losses = cumsum(losses) / sum(losses)) %>% 
     ggplot() +
-    geom_line(aes(x = cum_exp, y = cum_pred_lc)) +
+    geom_line(aes(x = cum_exp, y = cum_losses)) +
     geom_abline(intercept = 0, slope = 1) +
     xlab("Percentage of Exposure") +
     ylab("Percentage of Losses") + 
